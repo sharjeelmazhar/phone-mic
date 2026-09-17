@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Phone Mic (on/off)
+Comment=Toggle using the Android phone as this computer's microphone
+Exec=@HOME@/.local/bin/phone-mic toggle
+Icon=audio-input-microphone
+Terminal=false
+Categories=AudioVideo;Audio;

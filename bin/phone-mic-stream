@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+# phone-mic-stream — run by phone-mic.service (systemd user unit).
+# Waits until the phone is reachable over adb (USB preferred, Wi-Fi fallback),
+# then streams its microphone with scrcpy into the loopback input stream "phone_mic_in".
+# Apps on the computer see it as the input device "Phone Mic".
+# When scrcpy ends (cable pulled, Wi-Fi lost, ...) the script exits and systemd restarts it.
+
+set -u
+
+CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/phone-mic"
+CONF="$CONF_DIR/config"
+STATE="$CONF_DIR/phone-addr"      # last known Wi-Fi address of the phone, written automatically
+mkdir -p "$CONF_DIR"
+
+# Defaults (override in ~/.config/phone-mic/config)
+AUDIO_SOURCE="mic"                # mic | mic-unprocessed | mic-voice-recognition | mic-voice-communication | mic-camcorder
+AUDIO_BUFFER=50                   # ms; raise to 100-200 if the sound crackles over Wi-Fi
+AUDIO_CODEC="opus"
+TCP_PORT=5555
+WIFI=1                            # 1 = also use the phone over Wi-Fi when no USB cable is attached
+PHONE_ADDR=""                     # optional fixed ip:port; normally learned automatically over USB
+TARGET="phone_mic_in"              # input side of the pw-loopback from phone-mic-device.service
+[ -f "$CONF" ] && . "$CONF"
+
+log() { echo "[phone-mic] $*"; }
+
+usb_serial()  { adb devices | awk 'NR>1 && $2=="device" && $1 !~ /:/ {print $1; exit}'; }
+wifi_serial() { adb devices | awk 'NR>1 && $2=="device" && $1 ~ /:/  {print $1; exit}'; }
+
+# While the phone is on USB: make sure adb-over-Wi-Fi is switched on and remember the phone's IP,
+# so Wi-Fi mode keeps working after the cable is removed (until the phone reboots).
+prepare_wifi() {
+    local serial="$1" port ip
+    [ "$WIFI" = 1 ] || return 0
+    ip=$(timeout 5 adb -s "$serial" shell ip -4 -o addr show wlan0 2>/dev/null | awk '{split($4,a,"/"); print a[1]; exit}')
+    [ -n "$ip" ] && echo "$ip:$TCP_PORT" > "$STATE"
+    port=$(timeout 5 adb -s "$serial" shell getprop service.adb.tcp.port 2>/dev/null | tr -d '\r')
+    if [ "$port" != "$TCP_PORT" ]; then
+        log "enabling adb over Wi-Fi on port $TCP_PORT (phone IP: ${ip:-unknown})"
+        timeout 10 adb -s "$serial" tcpip "$TCP_PORT" >/dev/null 2>&1
+        sleep 3                   # adbd restarts on the phone; USB comes back after a moment
+    fi
+}
+
+find_device() {
+    local s addr
+    s=$(usb_serial)
+    if [ -n "$s" ]; then echo "$s"; return 0; fi
+    [ "$WIFI" = 1 ] || return 1
+    s=$(wifi_serial)
+    if [ -n "$s" ]; then echo "$s"; return 0; fi
+    addr="$PHONE_ADDR"
+    [ -z "$addr" ] && [ -f "$STATE" ] && addr=$(cat "$STATE")
+    [ -n "$addr" ] || return 1
+    timeout 6 adb connect "$addr" >/dev/null 2>&1
+    s=$(wifi_serial)
+    if [ -n "$s" ]; then echo "$s"; return 0; fi
+    timeout 3 adb disconnect "$addr" >/dev/null 2>&1   # drop stale/offline entry
+    return 1
+}
+
+# Never start without the loopback target: otherwise the mic could end up on the speakers.
+until pw-link -i 2>/dev/null | grep -q "^$TARGET:"; do
+    log "waiting for $TARGET (phone-mic-device.service)"
+    sleep 3
+done
+
+# Normally adb-server.service already runs the adb server (in its own unit, so that restarts of this
+# service never kill other adb users such as a scrcpy screen-mirroring window). This is only a fallback.
+adb start-server >/dev/null 2>&1
+
+announced=0
+while :; do
+    serial=$(find_device) && break
+    if [ "$announced" = 0 ]; then
+        log "waiting for phone (USB cable, or Wi-Fi at ${PHONE_ADDR:-$(cat "$STATE" 2>/dev/null || echo 'unknown address')})"
+        adb devices | awk 'NR>1 && $2=="unauthorized" {print "[phone-mic] phone "$1" is UNAUTHORIZED: unlock it and tap Allow on the USB debugging prompt"}'
+        announced=1
+    fi
+    sleep 4
+done
+
+case "$serial" in
+    *:*) log "phone found over Wi-Fi ($serial)" ;;
+    *)   log "phone found over USB ($serial)"; prepare_wifi "$serial"
+         serial=$(usb_serial); [ -n "$serial" ] || { log "USB device went away, retrying"; exit 1; } ;;
+esac
+
+log "streaming microphone (source=$AUDIO_SOURCE codec=$AUDIO_CODEC buffer=${AUDIO_BUFFER}ms) -> $TARGET"
+# Native PipeWire output (the PulseAudio API cannot target a stream, only real sinks).
+# dont-move / dont-fallback: the stream may only ever be linked to $TARGET, never to the speakers.
+SDL_AUDIODRIVER=pipewire PIPEWIRE_NODE="$TARGET" \
+PIPEWIRE_PROPS="{ node.dont-move=true node.dont-fallback=true node.dont-reconnect=false }" \
+    scrcpy -s "$serial" --no-video --no-control --no-window \
+           --audio-source="$AUDIO_SOURCE" --audio-codec="$AUDIO_CODEC" --audio-buffer="$AUDIO_BUFFER" &
+pid=$!
+trap 'kill $pid 2>/dev/null' TERM INT
+
+# Watchdog: if the stream is not linked to $TARGET (e.g. PipeWire or the virtual mic was restarted),
+# stop scrcpy so that systemd starts everything fresh. The stream does not re-link by itself.
+sleep 12
+while kill -0 $pid 2>/dev/null; do
+    if ! pw-link -l 2>/dev/null | grep -q "$TARGET:input_"; then
+        log "stream is not linked to $TARGET any more; restarting"
+        kill $pid 2>/dev/null
+        break
+    fi
+    sleep 5
+done
+wait $pid; rc=$?
+log "scrcpy ended (exit $rc); will retry"
+exit 1

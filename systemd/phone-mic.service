@@ -1,0 +1,12 @@
+[Unit]
+Description=Phone Mic — stream the Android phone's microphone (scrcpy over adb)
+After=phone-mic-device.service adb-server.service
+Wants=phone-mic-device.service adb-server.service
+
+[Service]
+ExecStart=%h/.local/bin/phone-mic-stream
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

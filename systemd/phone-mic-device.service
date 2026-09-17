@@ -1,0 +1,19 @@
+[Unit]
+Description=Phone Mic — virtual microphone device (PipeWire loopback)
+After=pipewire.service pipewire-pulse.service wireplumber.service
+Requires=pipewire.service
+PartOf=pipewire.service
+
+[Service]
+# Creates two nodes:
+#   phone_mic_in  a plain input *stream* (NOT a device, so it never shows up under Output in Settings).
+#                 autoconnect=false: nothing gets linked to it except the scrcpy stream that targets it by name.
+#   phone_mic     the input device "Phone Mic" that apps record from
+ExecStart=/usr/bin/pw-loopback --name phone-mic \
+  --capture-props='node.name=phone_mic_in node.description="Phone Mic feed" node.autoconnect=false audio.position=[FL,FR]' \
+  --playback-props='media.class=Audio/Source node.name=phone_mic node.description="Phone Mic" audio.position=[FL,FR]'
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

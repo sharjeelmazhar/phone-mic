@@ -1,0 +1,13 @@
+[Unit]
+Description=adb server (shared by Phone Mic and any scrcpy / adb you run yourself)
+
+[Service]
+# Own unit on purpose: when phone-mic.service restarts, systemd cleans up its processes. If the adb server
+# lived inside phone-mic.service it would be killed too, taking down e.g. a scrcpy mirroring window.
+ExecStart=/usr/bin/adb server nodaemon
+ExecStop=/usr/bin/adb kill-server
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

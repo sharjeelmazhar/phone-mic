@@ -1,0 +1,18 @@
+# ~/.config/phone-mic/config — settings for phone-mic-stream. After editing:  phone-mic off && phone-mic on
+
+# Which phone microphone mode to use:
+#   mic                       normal (default)
+#   mic-voice-communication   phone applies echo-cancel/noise suppression, good for calls
+#   mic-voice-recognition     tuned for dictation / speech-to-text
+#   mic-unprocessed           raw
+#AUDIO_SOURCE="mic"
+
+# Milliseconds of buffering. Raise to 100-200 if audio crackles over Wi-Fi.
+#AUDIO_BUFFER=50
+
+# 1 = use the phone over Wi-Fi when no USB cable is attached, 0 = USB only
+#WIFI=1
+
+# Fixed phone address. Normally NOT needed: it is learned automatically each time the phone is on USB
+# and stored in ~/.config/phone-mic/phone-addr
+#PHONE_ADDR="192.168.1.50:5555"

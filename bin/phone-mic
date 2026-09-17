@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# phone-mic — small control command for the phone-as-microphone setup.
+#   phone-mic on | off | toggle | status | log | test | default | doctor
+
+UNITS="adb-server.service phone-mic-device.service phone-mic.service"
+notify() { command -v notify-send >/dev/null && notify-send -i audio-input-microphone "Phone Mic" "$1"; echo "$1"; }
+
+case "${1:-status}" in
+    on)      systemctl --user start $UNITS && notify "ON — streaming starts as soon as the phone is reachable" ;;
+    off)     systemctl --user stop phone-mic.service && notify "OFF — phone microphone released" ;;
+    toggle)  if systemctl --user is-active -q phone-mic.service; then "$0" off; else "$0" on; fi ;;
+    default) pactl set-default-source phone_mic && echo "Phone Mic is now the default input device" ;;
+    log)     journalctl --user -u phone-mic.service -u phone-mic-device.service -n "${2:-40}" --no-pager ;;
+    status)
+        for u in $UNITS; do printf "%-28s %s / autostart: %s\n" "$u" "$(systemctl --user is-active $u)" "$(systemctl --user is-enabled $u 2>/dev/null)"; done
+        echo "adb devices:"; adb devices | sed 1d | sed 's/^/   /'
+        echo "default input: $(pactl get-default-source)"
+        if pw-link -l 2>/dev/null | grep -q "phone_mic_in:input_"; then echo "stream: phone audio IS flowing into Phone Mic"; else echo "stream: not streaming"; fi ;;
+    test)
+        f=$(mktemp --suffix=.wav); echo "Recording 5 seconds from Phone Mic — speak now..."
+        timeout 5 parecord -d phone_mic --file-format=wav "$f"
+        python3 - "$f" <<'EOF'
+import sys, wave, struct
+w = wave.open(sys.argv[1]); n = w.getnframes() * w.getnchannels()
+d = struct.unpack('<%dh' % n, w.readframes(w.getnframes())) if n else [0]
+p = max(abs(x) for x in d); print("peak level: %d / 32767  ->  %s" % (p, "OK, sound received" if p > 500 else "SILENT (phone not streaming?)"))
+EOF
+        echo "Playing it back..."; paplay "$f"; rm -f "$f" ;;
+    doctor)
+        "$0" status; echo "--- last log lines:"; "$0" log 15 ;;
+    *) echo "usage: phone-mic on|off|toggle|status|log|test|default|doctor"; exit 2 ;;
+esac
