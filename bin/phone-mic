@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # phone-mic — small control command for the phone-as-microphone setup.
-#   phone-mic on | off | toggle | enable | disable | state | status | log | test | default | doctor
+#   phone-mic on | off | toggle | enable | disable | state | status | log | test | default | doctor | kdeconnect [add|remove]
 
 UNITS="adb-server.service phone-mic-device.service phone-mic.service"
 notify() { command -v notify-send >/dev/null && notify-send -i audio-input-microphone "Phone Mic" "$1"; echo "$1"; }
@@ -38,5 +38,21 @@ EOF
         echo "Playing it back..."; paplay "$f"; rm -f "$f" ;;
     doctor)
         "$0" status; echo "--- last log lines:"; "$0" log 15 ;;
-    *) echo "usage: phone-mic on|off|toggle|enable|disable|state|status|log|test|default|doctor"; exit 2 ;;
+    kdeconnect)   # put "Phone Mic ON / OFF / TOGGLE" into the KDE Connect app on the phone (via GSConnect's Run Command)
+        what="${2:-add}"; me="$(readlink -f "$0")"
+        if command -v gjs >/dev/null && [ -f "$(dirname "$me")/phone-mic-gsconnect.js" ]; then
+            gjs -m "$(dirname "$me")/phone-mic-gsconnect.js" "$what" "$me"; rc=$?
+        else rc=2; fi
+        if [ "$rc" = 2 ]; then cat <<EOF
+No GSConnect found, so nothing was changed. To control the mic from the phone later:
+  GNOME:      install the GSConnect extension, pair the phone, then run:  phone-mic kdeconnect
+  KDE Plasma: System Settings -> KDE Connect -> your phone -> Run commands -> add:
+                Phone Mic ON      $me on
+                Phone Mic OFF     $me off
+                Phone Mic TOGGLE  $me toggle
+The commands then appear in the KDE Connect app on the phone under "Run Command".
+EOF
+        fi
+        exit $rc ;;
+    *) echo "usage: phone-mic on|off|toggle|enable|disable|state|status|log|test|default|doctor|kdeconnect [add|remove]"; exit 2 ;;
 esac

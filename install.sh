@@ -19,7 +19,7 @@ command -v systemctl >/dev/null && systemctl --user show-environment >/dev/null 
 pactl info 2>/dev/null | grep -q "PulseAudio (on PipeWire" || echo "Warning: the audio server does not look like PipeWire; the virtual mic needs PipeWire + WirePlumber."
 
 mkdir -p ~/.local/bin ~/.config/systemd/user ~/.local/share/applications ~/.config/phone-mic
-install -m 755 "$HERE/bin/phone-mic" "$HERE/bin/phone-mic-stream" ~/.local/bin/
+install -m 755 "$HERE/bin/phone-mic" "$HERE/bin/phone-mic-stream" "$HERE/bin/phone-mic-gsconnect.js" ~/.local/bin/
 install -m 644 "$HERE"/systemd/*.service ~/.config/systemd/user/
 sed "s|@HOME@|$HOME|g" "$HERE/phone-mic-toggle.desktop" > ~/.local/share/applications/phone-mic-toggle.desktop
 [ -f ~/.config/phone-mic/config ] || install -m 644 "$HERE/config.example" ~/.config/phone-mic/config
@@ -48,5 +48,8 @@ systemctl --user restart adb-server.service
 systemctl --user restart phone-mic-device.service
 sleep 2
 systemctl --user restart phone-mic.service
+# Optional: "Phone Mic ON/OFF/TOGGLE" buttons in the KDE Connect app on the phone (needs GSConnect + a paired phone).
+# Harmless if GSConnect is missing; can be run any time later with:  phone-mic kdeconnect
+~/.local/bin/phone-mic kdeconnect add 2>/dev/null | head -1 || true
 echo "Installed. Check with:  phone-mic status"
 case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) echo "Note: ~/.local/bin is not in PATH yet (it will be after the next login). Until then use: ~/.local/bin/phone-mic";; esac

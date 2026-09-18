@@ -134,6 +134,24 @@ starts is used, USB before Wi-Fi.
 Switching back is the same four steps with the first phone. If two phones with debugging on are plugged in at the same time,
 set `PHONE_SERIAL` in the config to say which one to use.
 
+### Cut the mic from the phone itself (KDE Connect)
+
+If the computer runs [GSConnect](https://extensions.gnome.org/extension/1319/gsconnect/) (GNOME) or KDE Connect (Plasma) and the
+phone is paired, the install adds three entries to the phone's **KDE Connect → Run Command** list: **Phone Mic ON**, **Phone Mic OFF**,
+**Phone Mic TOGGLE**. So wherever you are with the phone, one tap turns the mic off (or back on). On Android you can also put these
+into the KDE Connect tile of the quick-settings panel, next to Wi-Fi and Bluetooth.
+
+<p align="center">
+<img src="docs/kdeconnect-run-command.jpg" width="230" alt="KDE Connect app: Run Command list with Phone Mic ON, OFF and TOGGLE">&nbsp;&nbsp;
+<img src="docs/kdeconnect-control-centre.jpg" width="230" alt="Android quick-settings panel: KDE Connect tile showing Phone Mic OFF and ON buttons">
+</p>
+
+- `install.sh` does this automatically when GSConnect and a paired phone are present; otherwise it prints what to do and changes nothing.
+- Set up GSConnect later? Run `phone-mic kdeconnect` any time. It is safe to repeat and keeps your other GSConnect commands.
+- `phone-mic kdeconnect remove` takes the three entries out again; `uninstall.sh` does that too.
+- KDE Plasma's own KDE Connect is not automated (untested here): add the three commands by hand in *System Settings → KDE Connect → Run commands*
+  (`phone-mic kdeconnect` prints the exact lines).
+
 ### Privacy
 
 While streaming, **anyone at the computer can record what the phone hears**, wherever the phone is. That is the whole point,
@@ -155,6 +173,7 @@ phone-mic default    make Phone Mic the default input device
 phone-mic test       record 5 s, show level, play back
 phone-mic log        recent log lines
 phone-mic doctor     status + log — paste this when asking for help
+phone-mic kdeconnect [add|remove]   buttons in the phone's KDE Connect app (see above)
 ```
 
 Config: `~/.config/phone-mic/config` (created from `config.example`). Options: `AUDIO_SOURCE` (`mic`, `mic-voice-communication`
@@ -189,6 +208,7 @@ for noise suppression, `mic-voice-recognition` for dictation), `AUDIO_BUFFER` (m
 | scrcpy screen mirroring at the same time, over Wi-Fi | both run together |
 | Phone's Wi-Fi switched off while streaming | noticed within ~7 s → *Waiting for phone*; streaming again 9–16 s after Wi-Fi is back on |
 | `phone-mic off` / `on` | stops instantly / streaming again within ~3 s |
+| Phone Mic ON / OFF from the KDE Connect app on the phone (GSConnect) | works; also from the KDE Connect tile in Android's quick-settings panel |
 | Not yet tested | computer suspend/resume; phone screen off for >10 min while streaming; switching between two phones |
 
 ## How it works
@@ -208,5 +228,5 @@ cannot target a stream; streams do not re-link after a loopback restart) for any
 
 ## Uninstall
 
-`./uninstall.sh` — removes the services, scripts, launcher and the GNOME tile. Then on the phone: Developer options → USB debugging OFF
+`./uninstall.sh` — removes the services, scripts, launcher, the GNOME tile and the KDE Connect buttons. Then on the phone: Developer options → USB debugging OFF
 (and *Revoke USB debugging authorisations* if you like).

@@ -160,3 +160,16 @@ Result ✔ — identical to the first full test, now with exact timings.
   scrcpy >= 2.1) vs. what will not (plain PulseAudio, non-systemd, Debian 12 scrcpy 1.25, non-GNOME has no tile). `install.sh` now prints
   the right package command for apt / pacman / dnf, refuses scrcpy < 2.1, and warns if the audio server is not PipeWire.
 - Full review of all scripts/units done earlier today (06:00); no code changes in this commit.
+
+### 07:15–07:40 — control the mic from the phone (KDE Connect "Run Command")
+- Manually added three entries to GSConnect's run-command list for the paired phone via `dconf write`
+  (key `…/device/<id>/plugin/runcommand/command-list`, type `a{sv}` of `a{ss}` {name, command}); user confirmed they appear in the
+  KDE Connect app and in Android's quick-settings KDE Connect tile, and that OFF/ON work from the phone.
+- Productised as `bin/phone-mic-gsconnect.js` (gjs, uses GSConnect's own GSettings schemas from the user or system extension dir,
+  `recursiveUnpack` → merge → `GLib.Variant('a{sv}')`) driven by `phone-mic kdeconnect [add|remove]`. Absolute path to `phone-mic`
+  is stored because GSConnect runs commands with a minimal PATH. `install.sh` calls `add` (non-fatal), `uninstall.sh` calls `remove`.
+- Edge cases tested: remove (ours gone, GSConnect defaults kept) · add (3 added, total 8) · add again (still 8, no duplicates) ·
+  key reset to defaults then add (defaults + ours) · GSConnect absent (simulated via env var: exit 2, instructions printed, nothing
+  changed) · install.sh end to end · stored command paths. Unpaired-device branch not exercised (needs a second, unpaired phone).
+- KDE Plasma's KDE Connect is not automated (no way to test here); the command prints the exact lines to add by hand.
+- README: section + two screenshots (docs/kdeconnect-*.jpg), Tested table row, uninstall note.
