@@ -145,3 +145,9 @@ Result: ✔ worst case handled with a single ~40 s cable plug; IP change handled
 - 06:40:52 cable in → phone on USB; 06:40:54 one-second drop (adbd restarting for `tcpip 5555`); 06:41:00 **streaming over USB** (8 s after plug-in).
 - 06:41:07 cable out; 06:41:11 found over Wi-Fi; 06:41:13 **streaming over Wi-Fi** (6 s after unplug).
 Result ✔ — identical to the first full test, now with exact timings.
+
+### 06:50 — own top-bar icon
+- The top-bar indicator used Adwaita's stock `phone-symbolic`. Replaced with an own 16 px symbolic SVG
+  (`gnome-extension/…/icons/phone-mic-symbolic.svg`): phone frame with a microphone inside, fills only (shell recolours it).
+  Loaded via `Gio.icon_new_for_string(extension.path + '/icons/…')`. `install.sh` now copies the extension directory recursively.
+  Rendered at 160 px and at 16 px for a visual check. Visible after the next login (GNOME reloads extensions only at login).

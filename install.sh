@@ -17,7 +17,7 @@ sed "s|@HOME@|$HOME|g" "$HERE/phone-mic-toggle.desktop" > ~/.local/share/applica
 UUID=phone-mic@sharjeelmazhar.github.io
 if command -v gnome-shell >/dev/null; then
     mkdir -p ~/.local/share/gnome-shell/extensions/$UUID
-    install -m 644 "$HERE"/gnome-extension/$UUID/* ~/.local/share/gnome-shell/extensions/$UUID/
+    cp -r "$HERE"/gnome-extension/$UUID/. ~/.local/share/gnome-shell/extensions/$UUID/
     # `gnome-extensions enable` only works once the shell has loaded the extension (at login). Writing the
     # setting directly makes it enabled at the next login too, so no visit to Extension Manager is needed.
     cur=$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null || echo "@as []")

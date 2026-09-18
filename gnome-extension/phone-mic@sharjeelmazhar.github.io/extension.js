@@ -76,10 +76,11 @@ class PhoneMicToggle extends QuickToggle {
 
 const PhoneMicIndicator = GObject.registerClass(
 class PhoneMicIndicator extends SystemIndicator {
-    _init() {
+    _init(extensionPath) {
         super._init();
         this._indicator = this._addIndicator();
-        this._indicator.iconName = 'phone-symbolic';
+        // own icon: a phone with a microphone inside (icons/phone-mic-symbolic.svg), recoloured by the shell
+        this._indicator.gicon = Gio.icon_new_for_string(`${extensionPath}/icons/phone-mic-symbolic.svg`);
         this._indicator.visible = false;
         this._toggle = new PhoneMicToggle();
         this.quickSettingsItems.push(this._toggle);
@@ -94,7 +95,7 @@ class PhoneMicIndicator extends SystemIndicator {
 
 export default class PhoneMicExtension extends Extension {
     enable() {
-        this._indicator = new PhoneMicIndicator();
+        this._indicator = new PhoneMicIndicator(this.path);
         const qs = Main.panel.statusArea.quickSettings;
         qs.addExternalIndicator(this._indicator);
 
