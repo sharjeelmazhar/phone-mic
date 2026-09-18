@@ -4,7 +4,7 @@
 
 **Goal:** use Redmi Note 11 (model 2201117TG, HyperOS 1.0.8.0, Android 13) as microphone for desktop MDPT
 (Dell Precision 5820, Ubuntu 26.04.1, GNOME 50 / Wayland, PipeWire 1.6.2 + WirePlumber 0.5.13). PC on Ethernet
-192.168.1.18, phone on same LAN via Wi-Fi. GSConnect already works (not used for this; it has no mic feature).
+192.168.1.y, phone on same LAN via Wi-Fi. GSConnect already works (not used for this; it has no mic feature).
 
 **Findings on the computer**
 - Already installed: `scrcpy 3.3.4`, `adb 34.0.5`, `pw-loopback`, `pactl`. Not installed: ffmpeg (not needed).
@@ -24,13 +24,13 @@ works over USB *and* Wi-Fi, low latency. Trade-off: needs USB debugging enabled 
 3. Ran `./install.sh` → both services enabled + active; log shows `waiting for phone`.
 
 **Pending**
-- [x] Phone: Developer options + USB debugging enabled, USB authorised (serial e857a8b, phone Wi-Fi IP 192.168.1.5).
+- [x] Phone: Developer options + USB debugging enabled, USB authorised (serial <serial>, phone Wi-Fi IP 192.168.1.x).
 - [x] Stream over USB verified (04:27): 2 s recording from default input → peak 1292, rms 326 (room noise), not silent.
-- [x] Wi-Fi mode verified 04:31 after unplugging (user confirmed dictation works; log: `phone found over Wi-Fi (192.168.1.5:5555)`).
+- [x] Wi-Fi mode verified 04:31 after unplugging (user confirmed dictation works; log: `phone found over Wi-Fi (192.168.1.x:5555)`).
 - [x] Phone Mic set as default input (`pactl set-default-source phone_mic`).
 
 ### 04:20–04:27 — first connection, two problems found and fixed
-- Phone connected fine on first try; script auto-enabled `adb tcpip 5555` and saved `192.168.1.5:5555`.
+- Phone connected fine on first try; script auto-enabled `adb tcpip 5555` and saved `192.168.1.x:5555`.
   (The one "Device disconnected / exit 2" in the log right after is expected: enabling tcpip restarts adb on the phone; service retried by itself.)
 - **Problem 1: phone mic was audible on the PC speakers.** Cause: in Settings → Sound the *Output Device* was switched
   (to "Phone Mic (internal input)" and back). GNOME moves *all* playing streams to the newly chosen output, so it dragged the
@@ -67,3 +67,10 @@ works over USB *and* Wi-Fi, low latency. Trade-off: needs USB debugging enabled 
 **Still open**
 - [ ] User: reboot computer and confirm everything comes up alone.
 - [ ] Behaviour with phone screen off / locked for >10 min.
+
+### 05:15–05:40 — polish for public repo
+- `phone-mic enable|disable` added (autostart on/off); `phone-mic off` now leaves the unit *inactive* instead of *failed* (clean exit on SIGTERM).
+- `PHONE_SERIAL` config option (lock to one phone when several Android devices are plugged in).
+- Stale Wi-Fi adb connection is dropped when a Wi-Fi session dies within 20 s (suspend/resume case). Not yet tested with a real suspend.
+- Identifiers (serial, IPs) scrubbed from this log for publishing. README rewritten for fresh installs and other users.
+- Tested: off → inactive, on → streaming again within ~8 s.

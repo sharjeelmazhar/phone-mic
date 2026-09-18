@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # phone-mic — small control command for the phone-as-microphone setup.
-#   phone-mic on | off | toggle | status | log | test | default | doctor
+#   phone-mic on | off | toggle | enable | disable | status | log | test | default | doctor
 
 UNITS="adb-server.service phone-mic-device.service phone-mic.service"
 notify() { command -v notify-send >/dev/null && notify-send -i audio-input-microphone "Phone Mic" "$1"; echo "$1"; }
 
 case "${1:-status}" in
     on)      systemctl --user start $UNITS && notify "ON — streaming starts as soon as the phone is reachable" ;;
-    off)     systemctl --user stop phone-mic.service && notify "OFF — phone microphone released" ;;
+    off)     systemctl --user stop phone-mic.service && notify "OFF — phone microphone released (until 'phone-mic on' or next login)" ;;
+    enable)  systemctl --user enable --now $UNITS >/dev/null 2>&1 && echo "autostart ON: phone mic connects automatically at every login" ;;
+    disable) systemctl --user disable --now phone-mic.service >/dev/null 2>&1 && echo "autostart OFF and stopped: use 'phone-mic on' when you want it, 'phone-mic enable' to make it automatic again" ;;
     toggle)  if systemctl --user is-active -q phone-mic.service; then "$0" off; else "$0" on; fi ;;
     default) pactl set-default-source phone_mic && echo "Phone Mic is now the default input device" ;;
     log)     journalctl --user -u phone-mic.service -u phone-mic-device.service -n "${2:-40}" --no-pager ;;
@@ -28,5 +30,5 @@ EOF
         echo "Playing it back..."; paplay "$f"; rm -f "$f" ;;
     doctor)
         "$0" status; echo "--- last log lines:"; "$0" log 15 ;;
-    *) echo "usage: phone-mic on|off|toggle|status|log|test|default|doctor"; exit 2 ;;
+    *) echo "usage: phone-mic on|off|toggle|enable|disable|status|log|test|default|doctor"; exit 2 ;;
 esac

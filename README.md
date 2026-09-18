@@ -1,120 +1,136 @@
-# Phone as microphone (Redmi Note 11 → Ubuntu 26.04 desktop "MDPT")
+# Android phone as a microphone for Ubuntu
 
-The phone's microphone shows up on the computer as a normal input device called **"Phone Mic"**.
-Any app (dictation, WhatsApp Web/Desktop, browsers, recorders) can use it.
+Turns an Android phone into a normal microphone for a Linux desktop. The phone shows up as an input device
+called **"Phone Mic"** in every app: dictation, WhatsApp, Discord, browsers, Zoom, recorders.
+
+- **Nothing to install on the phone.** Uses Android's built-in debugging link (adb) and [scrcpy](https://github.com/Genymobile/scrcpy).
+- **USB cable or Wi-Fi.** Same home network is enough. USB is used when plugged in, Wi-Fi otherwise.
+- **Zero-touch after setup.** Starts at login, reconnects by itself when the phone comes and goes, survives computer reboots.
+- **Does not interfere** with anything else: the phone works normally (calls, apps, screen off); the computer's sound output, headphones and other mics stay as they were. Nothing system-wide is changed on the computer (no sudo, nothing runs as root, all per-user).
+- **One command to cut the mic** for privacy: `phone-mic off`.
+
+Built and tested on Ubuntu 26.04 (GNOME, PipeWire 1.6, WirePlumber 0.5) with a Redmi Note 11 (HyperOS 1.0, Android 13).
+Needs Android 11 or newer (mic capture over adb) and a Linux desktop running PipeWire (default on Ubuntu 22.10+, Fedora, Arch...).
+
+## 1. Install (computer)
+
+```bash
+sudo apt install adb scrcpy pipewire-bin pulseaudio-utils git
+git clone https://github.com/<you>/Mic-Setup.git ~/Code/Mic-Setup
+cd ~/Code/Mic-Setup
+./install.sh
+```
+
+`install.sh` copies two scripts to `~/.local/bin`, three user services to `~/.config/systemd/user`, a launcher to the app grid,
+and starts everything. Re-run it any time; it is safe. `./uninstall.sh` removes all of it.
+
+## 2. Enable USB debugging (phone, one time)
+
+Generic Android: Settings → About phone → tap **Build number** 7 times → Settings → System → Developer options.
+
+Xiaomi / Redmi / POCO (HyperOS or MIUI): Settings → About phone → tap **OS version** (MIUI: *MIUI version*) 7 times
+→ Settings → **Additional settings → Developer options**.
+
+In Developer options:
+
+| Setting | Set to | Why |
+|---|---|---|
+| **USB debugging** | ON | required |
+| **Disable adb authorisation timeout** | ON | otherwise Android forgets the computer after 7 days without use and asks again |
+| USB debugging (Security settings) *(Xiaomi only)* | optional | only for controlling the phone with mouse/keyboard in scrcpy; not needed for the mic |
+| Install via USB, Wireless debugging | leave OFF | not needed |
+
+## 3. Pair (one time)
+
+1. Plug the phone into the computer with a USB **data** cable and unlock the phone.
+2. Phone shows **"Allow USB debugging?"** → tick **Always allow from this computer** → **Allow**.
+3. On the computer: `phone-mic status` should say `phone audio IS flowing into Phone Mic`.
+4. `phone-mic default` makes Phone Mic the default input. `phone-mic test` records 5 s and plays it back.
+
+While the phone is on USB, the setup also switches on adb-over-Wi-Fi on the phone and remembers its IP address.
+**You can now unplug the cable.** The mic keeps working over Wi-Fi.
+
+## 4. Daily use — what happens when
+
+| Situation | What happens | You do |
+|---|---|---|
+| Computer restarts / you log in | services start, phone is found over Wi-Fi (or USB) within seconds | nothing |
+| Phone plugged in via USB | streams over USB (most reliable; also charges) | nothing |
+| Cable unplugged | drops for ~5 s, continues over Wi-Fi | nothing |
+| Phone leaves the house / Wi-Fi off / battery dead | mic goes silent, service keeps waiting quietly | nothing; it resumes when the phone is back |
+| Phone **rebooted** | Android forgets adb-over-Wi-Fi (a security feature, cannot be avoided) | plug USB in for ~5 s once, then unplug |
+| Phone gets a **new IP address** from the router | Wi-Fi connect fails | plug USB in for ~5 s once; or give the phone a fixed IP in the router so this never happens |
+| Computer suspended and resumed | stale connection is detected, stream restarts | nothing |
+| PipeWire / audio restarts on the computer | watchdog notices the lost link within 5 s and restarts the stream | nothing |
+| Phone screen off / locked | keeps streaming (Android shows the green mic dot) | nothing |
+| Phone call on the phone | Android gives the call priority; the stream may go silent during the call and resumes after | nothing |
+| Headphones plugged into the computer | sound output switches to headphones as usual; input stays Phone Mic | nothing |
+| Want the wired headset mic instead | | Settings → Sound → Input → pick it; `phone-mic default` to switch back |
+| Want the mic **off** (privacy, battery) | | `phone-mic off` (or the app-grid launcher "Phone Mic (on/off)") |
+| Mic off, want it back | | `phone-mic on` |
+| Never want it to start by itself | | `phone-mic disable` (then `phone-mic on` when needed; `phone-mic enable` to go back to automatic) |
+| Using scrcpy for screen mirroring at the same time | both work together, also over Wi-Fi | `scrcpy` as usual; `scrcpy -e` = Wi-Fi, `scrcpy -d` = USB when both exist |
+| Another Android device plugged into the computer | the script may pick it | set `PHONE_SERIAL` in the config (see below) |
+| Reinstalled the computer | new adb key → phone asks "Allow USB debugging?" again | steps 1 and 3 |
+| Changed phone | | Developer options on the new phone (step 2), then step 3 |
+
+### Privacy
+
+While streaming, **anyone at the computer can record what the phone hears**, wherever the phone is. That is the whole point,
+but remember it when you carry the phone around. `phone-mic off` stops it instantly (the green dot on the phone disappears);
+`phone-mic on` resumes. A stopped mic stays stopped until you turn it on or log in again; `phone-mic disable` makes "off" permanent.
+
+Wi-Fi mode leaves adb listening on port 5555 on the phone while it is on your Wi-Fi. Connections still need the computer's
+authorised key, so other devices on the network cannot use it. Prefer USB only? Set `WIFI=0` in the config.
+
+## 5. Commands
+
+```
+phone-mic status     services, adb devices, default input, streaming or not
+phone-mic on / off   start / stop streaming now
+phone-mic toggle     same, for a keyboard shortcut (Settings → Keyboard → Custom Shortcuts → command: phone-mic toggle)
+phone-mic enable / disable   automatic start at login on / off
+phone-mic default    make Phone Mic the default input device
+phone-mic test       record 5 s, show level, play back
+phone-mic log        recent log lines
+phone-mic doctor     status + log — paste this when asking for help
+```
+
+Config: `~/.config/phone-mic/config` (created from `config.example`). Options: `AUDIO_SOURCE` (`mic`, `mic-voice-communication`
+for noise suppression, `mic-voice-recognition` for dictation), `AUDIO_BUFFER` (ms, raise to 150 if Wi-Fi crackles),
+`WIFI` (0/1), `PHONE_ADDR` (fixed ip:5555), `PHONE_SERIAL`. After editing: `phone-mic off && phone-mic on`.
+
+## 6. Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `adb devices` empty with cable plugged in | charge-only cable or bad port: try another cable/port; check USB debugging is ON |
+| `unauthorized` in `phone-mic status` | unlock the phone and accept the prompt. No prompt? Developer options → *Revoke USB debugging authorisations*, replug |
+| Works on USB, not on Wi-Fi | phone rebooted or IP changed → plug USB once. Phone on a different network (guest Wi-Fi, mobile data)? Router isolates Wi-Fi from Ethernet ("AP isolation")? |
+| Crackles / drop-outs on Wi-Fi | `AUDIO_BUFFER=150` in the config, or use USB |
+| App hears nothing | pick **Phone Mic** in the app or in Settings → Sound → Input; check input volume isn't 0; `phone-mic test` |
+| "Phone Mic" missing from the input list | `systemctl --user restart phone-mic-device` |
+| Phone audio comes out of the speakers | must not happen (stream is pinned to the virtual mic and refuses to fall back). `phone-mic off && phone-mic on`, then `phone-mic doctor` |
+| Stream dies after minutes with screen off | phone battery saver killing adb: Settings → Battery → keep it off for now, or keep the phone charging |
+| Delay too high | it is ~50–100 ms; for lower use USB and `AUDIO_BUFFER=30` |
+| Anything else | `phone-mic doctor`; full output of a manual run: `phone-mic off; ~/.local/bin/phone-mic-stream` |
 
 ## How it works
 
 ```
-Phone mic ──(adb: USB cable or Wi-Fi)──> scrcpy ──> phone_mic_in ──(pw-loopback)──> "Phone Mic" input device ──> apps
+phone mic ─(adb over USB or Wi-Fi)─> scrcpy --audio-source=mic ─> phone_mic_in ─(pw-loopback)─> "Phone Mic" source ─> apps
 ```
 
-- **No app is installed on the phone.** `scrcpy` (already in Ubuntu, open source) uses Android's built-in
-  debugging link (adb) and captures the mic (`--audio-source=mic`, needs Android 11+, phone has 13).
-- Three systemd *user* services (no sudo, nothing system-wide was changed):
-  - `adb-server.service` — the adb server in its own unit, shared with any `scrcpy`/`adb` you run yourself.
-  - `phone-mic-device.service` — creates the virtual "Phone Mic" *input* device with `pw-loopback`. Always there, even with no phone.
-    It deliberately creates **no output device**: Settings → Sound → Output only ever shows real speakers/headphones.
-  - `phone-mic.service` — runs `phone-mic-stream`: waits for the phone, streams, and automatically retries forever when the link drops.
-- A watchdog in `phone-mic-stream` restarts the stream if it ever loses its connection to the virtual mic (e.g. PipeWire restarted).
-- All start automatically at login. Nothing to do after a reboot of the computer.
-
-## Phone setup (one time)
-
-1. **Settings → About phone → tap "OS version" 7 times** → "You are now a developer".
-2. **Settings → Additional settings → Developer options**:
-   - turn on **USB debugging** (accept the warnings),
-   - if the entry exists, turn on **Disable adb authorization timeout** (otherwise the phone forgets the computer after 7 days without use).
-   - *Not* needed: "USB debugging (Security settings)", "Install via USB", Mi account.
-3. Plug the phone into the computer with a **data-capable USB cable**, unlock the phone.
-4. A prompt "Allow USB debugging?" appears → tick **Always allow from this computer** → **Allow**.
-5. Within a few seconds the mic streams. Verify on the computer: `phone-mic status` then `phone-mic test`.
-
-## Daily use
-
-| Situation | What to do |
+| Part | Job |
 |---|---|
-| Phone plugged in by USB | Nothing. Streams automatically (most reliable, also charges). |
-| Phone on Wi-Fi only | Nothing, as long as the phone was on USB once since its last **phone** reboot (see below). |
-| Phone was rebooted | Plug it into USB once for ~5 seconds. That re-enables Wi-Fi mode. |
-| Want the mic off (privacy/battery) | App grid → **"Phone Mic (on/off)"**, or `phone-mic off` / `phone-mic on`. |
+| `adb-server.service` | the adb server, in its own unit so mic restarts never kill your own scrcpy/adb sessions |
+| `phone-mic-device.service` | `pw-loopback`: an input stream `phone_mic_in` (invisible to apps, so nothing appears under *Output*) feeding the virtual source `phone_mic` ("Phone Mic") |
+| `phone-mic.service` → `phone-mic-stream` | finds the phone (USB first, then Wi-Fi), enables `adb tcpip 5555` and saves the phone IP while on USB, runs `scrcpy --no-video --audio-source=mic` with SDL's PipeWire output pinned to `phone_mic_in` (`node.dont-move`, `node.dont-fallback`), watchdog re-links after audio restarts, exits so systemd retries when the phone goes away |
 
-Why the USB-once rule: Wi-Fi mode uses `adb tcpip 5555`, which Android forgets on every phone reboot.
-The script re-enables it and re-learns the phone's IP address automatically every time it sees the phone on USB.
-Android shows a green mic indicator while streaming — that is expected.
+`LOG.md` records the setup session, including the dead ends (virtual sinks show up as output devices; the PulseAudio API
+cannot target a stream; streams do not re-link after a loopback restart) for anyone adapting this.
 
-## Using scrcpy (screen mirroring) at the same time
+## Uninstall
 
-Works, also wirelessly, and does not disturb the mic (tested: mirror + mic together over Wi-Fi).
-
-```
-scrcpy              # when the phone is only on Wi-Fi OR only on USB
-scrcpy -e           # pick the Wi-Fi connection when the phone is also plugged in
-scrcpy -d           # pick the USB connection when both exist (smoothest video)
-```
-
-Phone Developer options needed:
-
-| Setting | Needed for |
-|---|---|
-| USB debugging = ON | everything (mic + scrcpy) |
-| Disable adb authorisation timeout = ON | not having to re-authorise after a week |
-| USB debugging (Security settings) = ON | only for *controlling* the phone with mouse/keyboard in scrcpy. Mic and view-only mirroring work without it. |
-| Install via USB, Wireless debugging | not needed (leave off) |
-
-## Fresh install on a new / reinstalled system
-
-```
-sudo apt install adb scrcpy pipewire-bin pulseaudio-utils git
-git clone <your repo url> ~/Code/Mic-Setup && cd ~/Code/Mic-Setup
-./install.sh
-```
-Then plug the phone in by USB once and accept "Allow USB debugging?" with **Always allow** ticked
-(a reinstalled computer has a new adb key, so the phone asks again). Finally: `phone-mic default`.
-Requires PipeWire + WirePlumber (default on Ubuntu 22.10+).
-
-## Commands (`~/.local/bin/phone-mic`)
-
-```
-phone-mic status    # services, adb devices, default input, streaming or not
-phone-mic test      # record 5 s from Phone Mic, show level, play it back
-phone-mic on|off|toggle
-phone-mic default   # make Phone Mic the default input device
-phone-mic log       # recent log lines
-phone-mic doctor    # status + log, paste this when asking for help
-```
-
-Settings: `~/.config/phone-mic/config` (mic mode, buffer, Wi-Fi on/off, fixed IP). See `config.example`.
-
-## Troubleshooting
-
-| Symptom | Cause / fix |
-|---|---|
-| `adb devices` shows nothing on USB | Charge-only cable or bad port. Try another cable. Check USB debugging is on. |
-| `unauthorized` in `adb devices` / log | Unlock phone, accept the prompt. No prompt? Developer options → *Revoke USB debugging authorizations*, replug. |
-| Works on USB, not on Wi-Fi | Phone rebooted (plug USB once), or phone IP changed (plug USB once), or phone left Wi-Fi. Optional: reserve a fixed IP for the phone in the router. |
-| Crackling / dropouts on Wi-Fi | Set `AUDIO_BUFFER=150` in the config. Or use USB. |
-| App doesn't hear anything | Choose **Phone Mic** as input in the app or in Settings → Sound → Input (`phone-mic default`). Check input volume is not 0. Run `phone-mic test`. |
-| Phone audio comes out of the PC speakers | Should not happen: the stream is pinned (`node.dont-move`, `node.dont-fallback`) and tested to stay unlinked rather than fall back to speakers. `phone-mic off; phone-mic on`, then check `phone-mic log`. |
-| "Phone Mic" device missing | `systemctl --user status phone-mic-device` ; `systemctl --user restart phone-mic-device`. |
-| Stream stops after several minutes with screen off | HyperOS battery saver. Keep phone charging, or Developer options → "Stay awake" while charging. Tell Claude what `phone-mic log` says. |
-| Anything else | `phone-mic doctor` and read the log. Manual run for full output: `phone-mic off; ~/.local/bin/phone-mic-stream` |
-
-## Security notes
-
-- USB debugging lets an *authorized* computer control the phone. Only this computer's key (`~/.android/adbkey`) is authorized. Never accept the debugging prompt for a computer you don't know.
-- Wi-Fi mode opens adb port 5555 on the phone inside the home network; connections still need the authorized key.
-  To avoid it completely set `WIFI=0` in the config (USB only).
-
-## Files
-
-| In this folder | Installed to |
-|---|---|
-| `bin/phone-mic`, `bin/phone-mic-stream` | `~/.local/bin/` |
-| `systemd/*.service` | `~/.config/systemd/user/` |
-| `phone-mic-toggle.desktop` | `~/.local/share/applications/` |
-| `config.example` | `~/.config/phone-mic/config` (only if missing) |
-| `install.sh` / `uninstall.sh` | re-install after editing files here / remove everything |
-| `LOG.md` | what was done, when, and test results |
-
-Edit files **here**, then run `./install.sh` again. To undo everything: `./uninstall.sh`.
+`./uninstall.sh` — removes the services, scripts and launcher. Then on the phone: Developer options → USB debugging OFF
+(and *Revoke USB debugging authorisations* if you like).
