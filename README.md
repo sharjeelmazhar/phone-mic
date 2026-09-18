@@ -21,9 +21,12 @@ cd ~/Code/Mic-Setup
 ./install.sh
 ```
 
-`install.sh` copies two scripts to `~/.local/bin`, three user services to `~/.config/systemd/user`, a launcher to the app grid,
-and, on GNOME, a small Quick Settings extension (the tile in the top-right menu: Off / Waiting for phone / Streaming, click to toggle;
-a phone icon shows in the top bar while streaming). Log out and in once after the first install for the tile to appear. Then it starts everything. Re-run it any time; it is safe. `./uninstall.sh` removes all of it.
+`install.sh` copies two scripts to `~/.local/bin`, three user services to `~/.config/systemd/user`, a launcher to the app grid
+and, on GNOME, a small Quick Settings extension, then starts everything. No sudo, nothing system-wide. Re-run it any time; it is safe.
+`./uninstall.sh` removes all of it.
+
+After the first install, **log out and back in once**: that puts `phone-mic` on your PATH and loads the GNOME tile
+(top-right menu → **Phone Mic**: shows Off / Waiting for phone / Streaming, click to toggle; a phone icon sits in the top bar while streaming).
 
 ## 2. Enable USB debugging (phone, one time)
 
@@ -73,7 +76,19 @@ While the phone is on USB, the setup also switches on adb-over-Wi-Fi on the phon
 | Using scrcpy for screen mirroring at the same time | both work together, also over Wi-Fi | `scrcpy` as usual; `scrcpy -e` = Wi-Fi, `scrcpy -d` = USB when both exist |
 | Another Android device plugged into the computer | the script may pick it | set `PHONE_SERIAL` in the config (see below) |
 | Reinstalled the computer | new adb key → phone asks "Allow USB debugging?" again | steps 1 and 3 |
-| Changed phone | | Developer options on the new phone (step 2), then step 3 |
+| USB debugging turned **off** on the phone (some banking apps insist) | mic stops; computer side just waits | turn it back on afterwards; if Wi-Fi mode doesn't return within a minute, plug USB once |
+| **Changed phone** | the setup is not tied to one phone: whichever authorised phone is on USB (or at the saved Wi-Fi address) is used | new phone: step 2, then plug it in and accept the prompt (step 3). Old phone: Developer options → USB debugging off (or *Revoke USB debugging authorisations*). Both around at once? set `PHONE_SERIAL` |
+
+### Laptops / computers that already have a microphone
+
+Everything above works the same; the only question is which input is the *default*. The setup never changes the default input by
+itself, so a laptop keeps its built-in mic as default and **Phone Mic is simply one more input** to pick in Settings → Sound → Input or
+inside the app (Zoom, Discord, browser...). The choice is remembered across reboots.
+
+- Desktop without a mic (this repo's origin): run `phone-mic default` once, Phone Mic stays the default forever.
+- Laptop, want the phone whenever it is around and the built-in mic otherwise: set `AUTO_DEFAULT=1` in the config.
+  Phone Mic becomes the default input only while the phone is streaming; when it stops, the previous input is restored.
+  (If you pick a different input yourself in the meantime, it is left alone.)
 
 ### Privacy
 

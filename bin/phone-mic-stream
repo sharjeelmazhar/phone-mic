@@ -20,11 +20,27 @@ TCP_PORT=5555
 WIFI=1                            # 1 = also use the phone over Wi-Fi when no USB cable is attached
 PHONE_ADDR=""                     # optional fixed ip:port; normally learned automatically over USB
 PHONE_SERIAL=""                   # optional: only use the phone with this USB serial (see `adb devices`) if several Android devices are around
+AUTO_DEFAULT=0                    # 1 = make Phone Mic the default input only while streaming, restore the previous input afterwards (laptops)
 TARGET="phone_mic_in"              # input side of the pw-loopback from phone-mic-device.service
 STREAM="phone_mic_stream"          # node name given to the scrcpy audio stream
 [ -f "$CONF" ] && . "$CONF"
 
 log() { echo "[phone-mic] $*"; }
+
+PREV_DEFAULT="$CONF_DIR/prev-default-input"
+# AUTO_DEFAULT=1: while streaming, Phone Mic becomes the default input; afterwards the previous one is restored.
+take_default() {
+    [ "$AUTO_DEFAULT" = 1 ] || return 0
+    local cur; cur=$(pactl get-default-source 2>/dev/null)
+    [ -n "$cur" ] && [ "$cur" != phone_mic ] && echo "$cur" > "$PREV_DEFAULT"
+    pactl set-default-source phone_mic 2>/dev/null && log "default input -> Phone Mic"
+}
+restore_default() {
+    [ "$AUTO_DEFAULT" = 1 ] && [ -f "$PREV_DEFAULT" ] || return 0
+    local prev; prev=$(cat "$PREV_DEFAULT"); rm -f "$PREV_DEFAULT"
+    [ "$(pactl get-default-source 2>/dev/null)" = phone_mic ] || return 0   # user picked something else meanwhile; leave it
+    pactl set-default-source "$prev" 2>/dev/null && log "default input restored -> $prev"
+}
 
 usb_serial()  { adb devices | awk -v want="$PHONE_SERIAL" 'NR>1 && $2=="device" && $1 !~ /:/ && (want=="" || $1==want) {print $1; exit}'; }
 wifi_serial() { adb devices | awk 'NR>1 && $2=="device" && $1 ~ /:/  {print $1; exit}'; }
@@ -34,7 +50,8 @@ wifi_serial() { adb devices | awk 'NR>1 && $2=="device" && $1 ~ /:/  {print $1; 
 prepare_wifi() {
     local serial="$1" port ip
     [ "$WIFI" = 1 ] || return 0
-    ip=$(timeout 5 adb -s "$serial" shell ip -4 -o addr show wlan0 2>/dev/null | awk '{split($4,a,"/"); print a[1]; exit}')
+    # Wi-Fi interface is wlan0 on almost every phone; fall back to any wlan* interface with an address.
+    ip=$(timeout 5 adb -s "$serial" shell ip -4 -o addr show 2>/dev/null | awk '$2 ~ /^wlan/ {split($4,a,"/"); print a[1]; exit}')
     [ -n "$ip" ] && echo "$ip:$TCP_PORT" > "$STATE"
     port=$(timeout 5 adb -s "$serial" shell getprop service.adb.tcp.port 2>/dev/null | tr -d '\r')
     if [ "$port" != "$TCP_PORT" ]; then
@@ -97,7 +114,7 @@ PIPEWIRE_PROPS="{ node.name=$STREAM node.description=\"Phone Mic stream\" node.d
     scrcpy -s "$serial" --no-video --no-control --no-window \
            --audio-source="$AUDIO_SOURCE" --audio-codec="$AUDIO_CODEC" --audio-buffer="$AUDIO_BUFFER" &
 pid=$!
-trap 'kill $pid 2>/dev/null; wait $pid 2>/dev/null; exit 0' TERM INT   # clean stop via phone-mic off
+trap 'kill $pid 2>/dev/null; wait $pid 2>/dev/null; restore_default; exit 0' TERM INT   # clean stop via phone-mic off
 
 # Watchdogs:
 #  - misrouted: the scrcpy stream got linked to anything but $TARGET (e.g. the speakers) -> kill it at once.
@@ -108,8 +125,9 @@ misrouted() { pw-link -l 2>/dev/null | awk -v n="$STREAM" -v t="$TARGET" '
     s && /\|->/        { if (index($0, t ":") == 0) bad = 1 }
     END                { exit !bad }'; }
 linked()    { pw-link -l 2>/dev/null | grep -q "$TARGET:input_"; }
-t=0
+t=0; taken=0
 while kill -0 $pid 2>/dev/null; do
+    if [ $taken = 0 ] && linked; then take_default; taken=1; fi
     if misrouted; then
         log "SAFETY STOP: stream was linked to something other than $TARGET"; kill $pid 2>/dev/null; break
     fi
@@ -120,6 +138,7 @@ while kill -0 $pid 2>/dev/null; do
 done
 wait $pid; rc=$?
 log "scrcpy ended (exit $rc); will retry"
+restore_default
 # A Wi-Fi session that died within seconds usually means adb holds a dead connection
 # (e.g. after suspend/resume or the phone dropping off Wi-Fi). Drop it so the next try reconnects cleanly.
 case "$serial" in *:*) [ $(( $(date +%s) - started )) -lt 20 ] && timeout 3 adb disconnect "$serial" >/dev/null 2>&1 ;; esac

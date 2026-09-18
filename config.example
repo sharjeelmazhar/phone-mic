@@ -20,3 +20,8 @@
 # Only use the phone with this USB serial number (from `adb devices`). Useful if other Android devices
 # get plugged into this computer. Empty = use whichever device is found.
 #PHONE_SERIAL="abc1234"
+
+# 1 = only while the phone is streaming, make Phone Mic the default input and restore the previous input
+# (e.g. a laptop's built-in mic) when the phone goes away. 0 = never touch the default input (choose it
+# yourself in Settings → Sound → Input or with `phone-mic default`; the choice is remembered).
+#AUTO_DEFAULT=0

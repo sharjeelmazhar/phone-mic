@@ -105,3 +105,17 @@ Result: ✔ worst case handled with a single ~40 s cable plug; IP change handled
 - `phone-mic state` subcommand added. `install.sh`/`uninstall.sh` copy/remove and enable/disable the extension when `gnome-shell` exists.
 - Verified logic outside the shell with gjs and stubbed shell classes: state read correctly, tile checked, indicator visible.
   Not yet seen live: GNOME (Wayland) loads new extensions only at login → user must log out/in once.
+
+### 06:00–06:20 — review of the whole repo before "fresh install" use
+- Read every file top to bottom. Running code is correct. Four fresh-install / other-user gaps fixed:
+  1. Tile had to be enabled by hand in Extension Manager (`gnome-extensions enable` fails before the shell has loaded the extension).
+     `install.sh` now also writes the UUID into `org.gnome.shell enabled-extensions` → enabled at next login automatically.
+  2. Right after a first install `phone-mic` is not on PATH until re-login (Ubuntu adds `~/.local/bin` at login only if it exists).
+     Services, tile and launcher use full paths so they don't care; `install.sh` prints a hint.
+  3. Phone IP detection was hard-wired to `wlan0`; now any `wlan*` interface.
+  4. Opt-in `AUTO_DEFAULT=1`: Phone Mic becomes default input only while streaming; previous input restored afterwards (laptops).
+     Default 0, so this desktop's behaviour is unchanged. Tested `take_default`/`restore_default` in isolation with the speaker monitor
+     as stand-in previous input: switched, remembered, restored; no-op when Phone Mic already was the default ✔.
+     The integrated path (called when the stream links) is not yet observed live — the phone was unreachable on Wi-Fi during the test.
+- Observed again: the phone dropped off Wi-Fi (no ping) for several minutes while idle; service kept waiting as designed.
+- User confirmed: after reboot the tile appears in Quick Settings and toggles the mic.

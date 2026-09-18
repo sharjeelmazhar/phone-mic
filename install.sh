@@ -18,8 +18,15 @@ UUID=phone-mic@sharjeelmazhar.github.io
 if command -v gnome-shell >/dev/null; then
     mkdir -p ~/.local/share/gnome-shell/extensions/$UUID
     install -m 644 "$HERE"/gnome-extension/$UUID/* ~/.local/share/gnome-shell/extensions/$UUID/
+    # `gnome-extensions enable` only works once the shell has loaded the extension (at login). Writing the
+    # setting directly makes it enabled at the next login too, so no visit to Extension Manager is needed.
+    cur=$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null || echo "@as []")
+    if ! grep -q "'$UUID'" <<<"$cur"; then
+        if [ "$cur" = "@as []" ] || [ "$cur" = "[]" ]; then new="['$UUID']"; else new="${cur%]}, '$UUID']"; fi
+        gsettings set org.gnome.shell enabled-extensions "$new" 2>/dev/null || true
+    fi
     gnome-extensions enable $UUID 2>/dev/null || true
-    echo "GNOME tile installed: log out and back in once if 'Phone Mic' is not in Quick Settings yet."
+    echo "GNOME tile installed: 'Phone Mic' appears in Quick Settings after you log out and back in once."
 fi
 
 systemctl --user daemon-reload
@@ -31,3 +38,4 @@ systemctl --user restart phone-mic-device.service
 sleep 2
 systemctl --user restart phone-mic.service
 echo "Installed. Check with:  phone-mic status"
+case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) echo "Note: ~/.local/bin is not in PATH yet (it will be after the next login). Until then use: ~/.local/bin/phone-mic";; esac
