@@ -16,7 +16,7 @@ Needs Android 11 or newer (mic capture over adb) and a Linux desktop running Pip
 
 ```bash
 sudo apt install adb scrcpy pipewire-bin pulseaudio-utils git
-git clone https://github.com/<you>/Mic-Setup.git ~/Code/Mic-Setup
+git clone https://github.com/sharjeelmazhar/Mic-Setup.git ~/Code/Mic-Setup
 cd ~/Code/Mic-Setup
 ./install.sh
 ```
