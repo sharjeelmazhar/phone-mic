@@ -17,14 +17,35 @@ built-in mic is poor: Phone Mic is simply one more input to choose, and the buil
 *The top-right menu on Ubuntu 26.04 LTS: the **Phone Mic** tile shows Off / Waiting for phone / Streaming and toggles the mic with one click.
 While streaming, a small phone icon sits in the top bar.*
 
-Built and tested on Ubuntu 26.04 LTS (GNOME, PipeWire 1.6, WirePlumber 0.5) with a Redmi Note 11 (HyperOS 1.0, Android 13).
-Needs Android 11 or newer (mic capture over adb) and a Linux system running PipeWire (default on Ubuntu 22.10+, Fedora, Arch...).
-The Quick Settings tile is GNOME-only; everything else works on any desktop environment (use the `phone-mic` commands).
+## Compatibility — what is tested and what is not
+
+**Tested:** Ubuntu 26.04 LTS with GNOME (PipeWire 1.6, WirePlumber 0.5, scrcpy 3.3) and a Redmi Note 11 (HyperOS 1.0, Android 13). That is the only combination anyone has run this on so far.
+
+What the setup needs, and therefore where it should work (untested unless marked):
+
+| Requirement | Why | Distros / desktops |
+|---|---|---|
+| **PipeWire + WirePlumber** as the audio server | the virtual mic is a PipeWire loopback; the scrcpy stream is pinned with PipeWire properties | Ubuntu 22.10+, Fedora 34+, Arch, openSUSE, Debian 12+, Manjaro... — *not* a system still on plain PulseAudio |
+| **systemd** user services | the three services | any systemd distro — *not* Void, Alpine, Devuan, Gentoo/OpenRC |
+| **scrcpy ≥ 2.1** with audio support | `--audio-source=mic` | Ubuntu 24.04+ ✔ (tested on 26.04), Arch/Manjaro ✔, Fedora via [scrcpy's install docs](https://github.com/Genymobile/scrcpy/blob/master/doc/linux.md), **Debian 12's scrcpy 1.25 is too old** (build from source or use a newer package) |
+| **adb** (android-tools) | the phone link | all distros. On Arch also install `android-udev` for USB access; Debian/Ubuntu ship the udev rules with adb |
+| `pactl`, `parecord`, `paplay` | default-input handling and `phone-mic test` | package `pulseaudio-utils` (Debian/Ubuntu/Fedora) or `libpulse` (Arch), plus `pipewire-pulse` |
+| **Android 11+** on the phone | mic capture over adb | any brand; Xiaomi/HyperOS is what was tested |
+
+Desktop environments: the mic itself is desktop-agnostic. The **Quick Settings tile is GNOME 48–50 only**. On KDE Plasma,
+Cinnamon, XFCE, Sway, etc. use the `phone-mic` commands, the app-grid launcher, or a keyboard shortcut for `phone-mic toggle`
+(notifications still appear). `install.sh` skips the tile when GNOME Shell is not present.
+
+If you run this on another distro or desktop, please open an issue with the result — the table above will be updated.
 
 ## 1. Install (computer)
 
 ```bash
+# Ubuntu 24.04+ / Debian 13+
 sudo apt install adb scrcpy pipewire-bin pulseaudio-utils git
+# Arch / Manjaro (untested):  sudo pacman -S android-tools android-udev scrcpy pipewire pipewire-pulse wireplumber libpulse git
+# Fedora (untested):          sudo dnf install android-tools pipewire-utils pulseaudio-utils git   + scrcpy from its install docs
+
 git clone https://github.com/sharjeelmazhar/phone-mic.git ~/Code/Mic-Setup
 cd ~/Code/Mic-Setup
 ./install.sh

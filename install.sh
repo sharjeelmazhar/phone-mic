@@ -3,9 +3,20 @@
 set -e
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
+# --- requirements -------------------------------------------------------------------------------
+if   command -v apt    >/dev/null; then HINT="sudo apt install adb scrcpy pipewire-bin pulseaudio-utils"
+elif command -v pacman >/dev/null; then HINT="sudo pacman -S android-tools android-udev scrcpy pipewire pipewire-pulse wireplumber libpulse"
+elif command -v dnf    >/dev/null; then HINT="sudo dnf install android-tools pipewire-utils pulseaudio-utils   (scrcpy: see https://github.com/Genymobile/scrcpy/blob/master/doc/linux.md)"
+else HINT="install adb, scrcpy (>= 2.1), pipewire (pw-loopback) and pulseaudio-utils (pactl) with your package manager"; fi
 for c in adb scrcpy pw-loopback pactl; do
-    command -v $c >/dev/null || { echo "MISSING: $c  ->  sudo apt install adb scrcpy pipewire-bin pulseaudio-utils"; exit 1; }
+    command -v $c >/dev/null || { echo "MISSING: $c  ->  $HINT"; exit 1; }
 done
+ver=$(scrcpy --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+if [ -n "$ver" ] && [ "$(printf '%s\n2.1\n' "$ver" | sort -V | head -1)" != "2.1" ]; then
+    echo "scrcpy $ver is too old: microphone capture needs scrcpy >= 2.1 (Debian 12 ships 1.25). See https://github.com/Genymobile/scrcpy/blob/master/doc/linux.md"; exit 1
+fi
+command -v systemctl >/dev/null && systemctl --user show-environment >/dev/null 2>&1 || { echo "This setup needs systemd user services (systemctl --user)."; exit 1; }
+pactl info 2>/dev/null | grep -q "PulseAudio (on PipeWire" || echo "Warning: the audio server does not look like PipeWire; the virtual mic needs PipeWire + WirePlumber."
 
 mkdir -p ~/.local/bin ~/.config/systemd/user ~/.local/share/applications ~/.config/phone-mic
 install -m 755 "$HERE/bin/phone-mic" "$HERE/bin/phone-mic-stream" ~/.local/bin/

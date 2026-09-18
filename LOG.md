@@ -156,4 +156,7 @@ Result ✔ — identical to the first full test, now with exact timings.
 - README: framed for any Linux computer (desktop or laptop, with or without a mic), GNOME-only note for the tile, `AUTO_DEFAULT` in the
   options list, Wi-Fi off/on timings in the Tested table, liveness check in "How it works", tile in Uninstall.
 - MIT LICENSE added. GitHub repository description and topics set.
+- Compatibility section added: honest about what was tested (Ubuntu 26.04 + GNOME only) vs. what should work (PipeWire + systemd distros,
+  scrcpy >= 2.1) vs. what will not (plain PulseAudio, non-systemd, Debian 12 scrcpy 1.25, non-GNOME has no tile). `install.sh` now prints
+  the right package command for apt / pacman / dnf, refuses scrcpy < 2.1, and warns if the audio server is not PipeWire.
 - Full review of all scripts/units done earlier today (06:00); no code changes in this commit.
