@@ -84,3 +84,15 @@ works over USB *and* Wi-Fi, low latency. Trade-off: needs USB debugging enabled 
 - **Observed:** with the phone screen off and no active stream, HyperOS Wi-Fi power-save made the phone unreachable for ~30 s
   (ping loss, port 5555 closed), then it came back and the service reconnected alone. So a reconnect can take up to a minute
   when the phone is asleep; while streaming, the link stays up. Documented in README.
+
+### 05:36–05:40 — full power-off test (router + computer + phone all off, then on)
+Timeline from the journal:
+- 05:36:36 computer up, services started, `waiting for phone` — phone still off / just booting. As expected, no stream:
+  the phone reboot forgot adb-over-Wi-Fi.
+- 05:39:16 cable plugged in → `phone found over USB`, adb-over-Wi-Fi re-enabled, **new phone IP learned (192.168.1.x → 192.168.1.z,
+  the router handed out a different address after its restart)**.
+- 05:39:20 streaming over USB.
+- 05:40:01 cable removed → scrcpy ended; 05:40:05 `phone found over Wi-Fi` at the new address, streaming again. 4 s gap.
+Result: ✔ worst case handled with a single ~40 s cable plug; IP change handled automatically. User confirmed mic works.
+- Headphones test (user, 05:30): plugging wired headphones moves output to headphones, input stays Phone Mic; switching input
+  to the headset mic and back works; unplugging returns output to speakers and input to Phone Mic. ✔

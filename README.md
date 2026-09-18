@@ -115,6 +115,20 @@ for noise suppression, `mic-voice-recognition` for dictation), `AUDIO_BUFFER` (m
 | Delay too high | it is ~50–100 ms; for lower use USB and `AUDIO_BUFFER=30` |
 | Anything else | `phone-mic doctor`; full output of a manual run: `phone-mic off; ~/.local/bin/phone-mic-stream` |
 
+## Tested
+
+| Scenario | Result |
+|---|---|
+| Computer reboot, phone untouched | back over Wi-Fi by itself, ~20 s after login |
+| Router + computer + phone all powered off and on | needs the one cable plug (phone reboot); the phone's **changed IP** was picked up automatically |
+| Cable unplugged while streaming | 4 s gap, continues over Wi-Fi |
+| Wired headphones plugged in / out | output follows the headphones, input stays Phone Mic; switching to the headset mic and back works |
+| Virtual mic or PipeWire restarted while streaming | stream re-attached within ~5 s, never touched the speakers |
+| Stream forced onto the speakers (`pw-link`) | killed within 1 s, back on Phone Mic after 3 s |
+| scrcpy screen mirroring at the same time, over Wi-Fi | both run together |
+| `phone-mic off` / `on` | stops instantly / streaming again within ~8 s |
+| Not yet tested | computer suspend/resume; phone screen off for >10 min while streaming |
+
 ## How it works
 
 ```
