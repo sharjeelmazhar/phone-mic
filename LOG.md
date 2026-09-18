@@ -66,7 +66,7 @@ works over USB *and* Wi-Fi, low latency. Trade-off: needs USB debugging enabled 
 
 **Still open**
 - [x] Computer reboot (05:25): all three services up, phone found over Wi-Fi with no cable, speakers + Phone Mic confirmed by user.
-- [ ] Behaviour with phone screen off / locked for >10 min.
+- [ ] Behaviour with phone screen off / locked for >10 min (not observed yet; streaming with screen off worked for shorter periods).
 
 ### 05:15–05:40 — polish for public repo
 - `phone-mic enable|disable` added (autostart on/off); `phone-mic off` now leaves the unit *inactive* instead of *failed* (clean exit on SIGTERM).
@@ -151,3 +151,9 @@ Result ✔ — identical to the first full test, now with exact timings.
   (`gnome-extension/…/icons/phone-mic-symbolic.svg`): phone frame with a microphone inside, fills only (shell recolours it).
   Loaded via `Gio.icon_new_for_string(extension.path + '/icons/…')`. `install.sh` now copies the extension directory recursively.
   Rendered at 160 px and at 16 px for a visual check. Visible after the next login (GNOME reloads extensions only at login).
+
+### 07:00 — final touches
+- README: framed for any Linux computer (desktop or laptop, with or without a mic), GNOME-only note for the tile, `AUTO_DEFAULT` in the
+  options list, Wi-Fi off/on timings in the Tested table, liveness check in "How it works", tile in Uninstall.
+- MIT LICENSE added. GitHub repository description and topics set.
+- Full review of all scripts/units done earlier today (06:00); no code changes in this commit.

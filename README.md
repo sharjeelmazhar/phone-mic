@@ -1,7 +1,10 @@
-# Android phone as a microphone for Ubuntu
+# Android phone as a microphone for Linux
 
-Turns an Android phone into a normal microphone for a Linux desktop. The phone shows up as an input device
-called **"Phone Mic"** in every app: dictation, WhatsApp, Discord, browsers, Zoom, recorders.
+Turns an Android phone into a normal microphone for any Linux computer — desktop or laptop, with or without a built-in mic.
+The phone shows up as an input device called **"Phone Mic"** in every app: dictation, WhatsApp, Discord, browsers, Zoom, recorders.
+
+Most useful on a **desktop that has no microphone at all** (that is where this came from), but just as usable on a laptop whose
+built-in mic is poor: Phone Mic is simply one more input to choose, and the built-in one stays as it is.
 
 - **Nothing to install on the phone.** Uses Android's built-in debugging link (adb) and [scrcpy](https://github.com/Genymobile/scrcpy).
 - **USB cable or Wi-Fi.** Same home network is enough. USB is used when plugged in, Wi-Fi otherwise.
@@ -15,7 +18,8 @@ called **"Phone Mic"** in every app: dictation, WhatsApp, Discord, browsers, Zoo
 While streaming, a small phone icon sits in the top bar.*
 
 Built and tested on Ubuntu 26.04 LTS (GNOME, PipeWire 1.6, WirePlumber 0.5) with a Redmi Note 11 (HyperOS 1.0, Android 13).
-Needs Android 11 or newer (mic capture over adb) and a Linux desktop running PipeWire (default on Ubuntu 22.10+, Fedora, Arch...).
+Needs Android 11 or newer (mic capture over adb) and a Linux system running PipeWire (default on Ubuntu 22.10+, Fedora, Arch...).
+The Quick Settings tile is GNOME-only; everything else works on any desktop environment (use the `phone-mic` commands).
 
 ## 1. Install (computer)
 
@@ -134,7 +138,7 @@ phone-mic doctor     status + log — paste this when asking for help
 
 Config: `~/.config/phone-mic/config` (created from `config.example`). Options: `AUDIO_SOURCE` (`mic`, `mic-voice-communication`
 for noise suppression, `mic-voice-recognition` for dictation), `AUDIO_BUFFER` (ms, raise to 150 if Wi-Fi crackles),
-`WIFI` (0/1), `PHONE_ADDR` (fixed ip:5555), `PHONE_SERIAL`. After editing: `phone-mic off && phone-mic on`.
+`WIFI` (0/1), `PHONE_ADDR` (fixed ip:5555), `PHONE_SERIAL`, `AUTO_DEFAULT` (0/1, see *Laptops*). After editing: `phone-mic off && phone-mic on`.
 
 ## 6. Troubleshooting
 
@@ -162,8 +166,9 @@ for noise suppression, `mic-voice-recognition` for dictation), `AUDIO_BUFFER` (m
 | Virtual mic or PipeWire restarted while streaming | stream re-attached within ~5 s, never touched the speakers |
 | Stream forced onto the speakers (`pw-link`) | killed within 1 s, back on Phone Mic after 3 s |
 | scrcpy screen mirroring at the same time, over Wi-Fi | both run together |
-| `phone-mic off` / `on` | stops instantly / streaming again within ~8 s |
-| Not yet tested | computer suspend/resume; phone screen off for >10 min while streaming |
+| Phone's Wi-Fi switched off while streaming | noticed within ~7 s → *Waiting for phone*; streaming again 9–16 s after Wi-Fi is back on |
+| `phone-mic off` / `on` | stops instantly / streaming again within ~3 s |
+| Not yet tested | computer suspend/resume; phone screen off for >10 min while streaming; switching between two phones |
 
 ## How it works
 
@@ -175,12 +180,12 @@ phone mic ─(adb over USB or Wi-Fi)─> scrcpy --audio-source=mic ─> phone_mi
 |---|---|
 | `adb-server.service` | the adb server, in its own unit so mic restarts never kill your own scrcpy/adb sessions |
 | `phone-mic-device.service` | `pw-loopback`: an input stream `phone_mic_in` (invisible to apps, so nothing appears under *Output*) feeding the virtual source `phone_mic` ("Phone Mic") |
-| `phone-mic.service` → `phone-mic-stream` | finds the phone (USB first, then Wi-Fi), enables `adb tcpip 5555` and saves the phone IP while on USB, runs `scrcpy --no-video --audio-source=mic` with SDL's PipeWire output pinned to `phone_mic_in` (`node.dont-move`, `node.dont-fallback`), two watchdogs (kills the stream within 1 s if it is ever linked to anything but `phone_mic_in`; restarts it if the link is lost), exits so systemd retries when the phone goes away |
+| `phone-mic.service` → `phone-mic-stream` | finds the phone (USB first, then Wi-Fi), enables `adb tcpip 5555` and saves the phone IP while on USB, runs `scrcpy --no-video --audio-source=mic` with SDL's PipeWire output pinned to `phone_mic_in` (`node.dont-move`, `node.dont-fallback`), three watchdogs (kills the stream within 1 s if it is ever linked to anything but `phone_mic_in`; restarts it if the link is lost; over Wi-Fi asks the phone for a reply every 4 s and gives up after 3 s of silence), exits so systemd retries when the phone goes away |
 
 `LOG.md` records the setup session, including the dead ends (virtual sinks show up as output devices; the PulseAudio API
 cannot target a stream; streams do not re-link after a loopback restart) for anyone adapting this.
 
 ## Uninstall
 
-`./uninstall.sh` — removes the services, scripts and launcher. Then on the phone: Developer options → USB debugging OFF
+`./uninstall.sh` — removes the services, scripts, launcher and the GNOME tile. Then on the phone: Developer options → USB debugging OFF
 (and *Revoke USB debugging authorisations* if you like).
