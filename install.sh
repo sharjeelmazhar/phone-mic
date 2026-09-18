@@ -13,7 +13,15 @@ install -m 644 "$HERE"/systemd/*.service ~/.config/systemd/user/
 sed "s|@HOME@|$HOME|g" "$HERE/phone-mic-toggle.desktop" > ~/.local/share/applications/phone-mic-toggle.desktop
 [ -f ~/.config/phone-mic/config ] || install -m 644 "$HERE/config.example" ~/.config/phone-mic/config
 
-pkill -f 'pw-loopback --name phone-mic-test' 2>/dev/null || true   # leftover from first manual test
+# Optional GNOME Quick Settings tile (only if GNOME Shell is present)
+UUID=phone-mic@sharjeelmazhar.github.io
+if command -v gnome-shell >/dev/null; then
+    mkdir -p ~/.local/share/gnome-shell/extensions/$UUID
+    install -m 644 "$HERE"/gnome-extension/$UUID/* ~/.local/share/gnome-shell/extensions/$UUID/
+    gnome-extensions enable $UUID 2>/dev/null || true
+    echo "GNOME tile installed: log out and back in once if 'Phone Mic' is not in Quick Settings yet."
+fi
+
 systemctl --user daemon-reload
 systemctl --user enable adb-server.service phone-mic-device.service phone-mic.service
 systemctl --user stop phone-mic.service 2>/dev/null || true

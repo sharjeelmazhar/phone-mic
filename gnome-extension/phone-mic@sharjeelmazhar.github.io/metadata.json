@@ -1,0 +1,8 @@
+{
+  "uuid": "phone-mic@sharjeelmazhar.github.io",
+  "name": "Phone Mic",
+  "description": "Quick Settings tile to start/stop using the Android phone as microphone (needs the phone-mic scripts from the same repo).",
+  "shell-version": ["48", "49", "50"],
+  "url": "https://github.com/sharjeelmazhar/phone-mic",
+  "version": 1
+}

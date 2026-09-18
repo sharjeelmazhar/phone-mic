@@ -22,7 +22,8 @@ cd ~/Code/Mic-Setup
 ```
 
 `install.sh` copies two scripts to `~/.local/bin`, three user services to `~/.config/systemd/user`, a launcher to the app grid,
-and starts everything. Re-run it any time; it is safe. `./uninstall.sh` removes all of it.
+and, on GNOME, a small Quick Settings extension (the tile in the top-right menu: Off / Waiting for phone / Streaming, click to toggle;
+a phone icon shows in the top bar while streaming). Log out and in once after the first install for the tile to appear. Then it starts everything. Re-run it any time; it is safe. `./uninstall.sh` removes all of it.
 
 ## 2. Enable USB debugging (phone, one time)
 
@@ -66,7 +67,7 @@ While the phone is on USB, the setup also switches on adb-over-Wi-Fi on the phon
 | Phone call on the phone | Android gives the call priority; the stream may go silent during the call and resumes after | nothing |
 | Headphones plugged into the computer | sound output switches to headphones as usual; input stays Phone Mic | nothing |
 | Want the wired headset mic instead | | Settings → Sound → Input → pick it; `phone-mic default` to switch back |
-| Want the mic **off** (privacy, battery) | | `phone-mic off` (or the app-grid launcher "Phone Mic (on/off)") |
+| Want the mic **off** (privacy, battery) | | Quick Settings tile **Phone Mic** (GNOME), `phone-mic off`, or the app-grid launcher "Phone Mic (on/off)" |
 | Mic off, want it back | | `phone-mic on` |
 | Never want it to start by itself | | `phone-mic disable` (then `phone-mic on` when needed; `phone-mic enable` to go back to automatic) |
 | Using scrcpy for screen mirroring at the same time | both work together, also over Wi-Fi | `scrcpy` as usual; `scrcpy -e` = Wi-Fi, `scrcpy -d` = USB when both exist |
@@ -90,6 +91,7 @@ phone-mic status     services, adb devices, default input, streaming or not
 phone-mic on / off   start / stop streaming now
 phone-mic toggle     same, for a keyboard shortcut (Settings → Keyboard → Custom Shortcuts → command: phone-mic toggle)
 phone-mic enable / disable   automatic start at login on / off
+phone-mic state      one word: off | waiting | streaming (used by the GNOME tile)
 phone-mic default    make Phone Mic the default input device
 phone-mic test       record 5 s, show level, play back
 phone-mic log        recent log lines

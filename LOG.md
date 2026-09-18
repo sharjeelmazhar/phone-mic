@@ -96,3 +96,12 @@ Timeline from the journal:
 Result: ✔ worst case handled with a single ~40 s cable plug; IP change handled automatically. User confirmed mic works.
 - Headphones test (user, 05:30): plugging wired headphones moves output to headphones, input stays Phone Mic; switching input
   to the headset mic and back works; unplugging returns output to speakers and input to Phone Mic. ✔
+
+### 05:45–05:55 — GNOME Quick Settings tile
+- User asked for an on/off toggle in the top-right quick menu. That needs a GNOME Shell extension; written as
+  `gnome-extension/phone-mic@sharjeelmazhar.github.io/` (metadata.json + extension.js, ~120 lines, no settings schema, no system changes).
+  Tile: title "Phone Mic", subtitle Off / Waiting for phone / Streaming, click runs `phone-mic on|off`; panel icon `phone-symbolic` while streaming.
+  Polls `phone-mic state` every 5 s and on menu open (Gio.Subprocess, async, never blocks the shell).
+- `phone-mic state` subcommand added. `install.sh`/`uninstall.sh` copy/remove and enable/disable the extension when `gnome-shell` exists.
+- Verified logic outside the shell with gjs and stubbed shell classes: state read correctly, tile checked, indicator visible.
+  Not yet seen live: GNOME (Wayland) loads new extensions only at login → user must log out/in once.
