@@ -139,3 +139,9 @@ Result: ✔ worst case handled with a single ~40 s cable plug; IP change handled
 - The watch exposed a cosmetic bug: for the 3 s systemd restart gap after a reconnect, `phone-mic state` said *off*
   (unit ActiveState=activating). The tile therefore flashed "Off" — very likely the earlier "it turned off by itself" report.
   Fix: `state` treats active/activating/reloading as running; only inactive/failed is *off*. Verified by killing scrcpy: no *off* during the gap.
+
+### 06:40–06:41 — second full power-off test (router + computer + phone), timed with a 1 s watch
+- 06:40:46 computer up, *waiting*, no phone (phone rebooted → Wi-Fi debugging forgotten, as expected).
+- 06:40:52 cable in → phone on USB; 06:40:54 one-second drop (adbd restarting for `tcpip 5555`); 06:41:00 **streaming over USB** (8 s after plug-in).
+- 06:41:07 cable out; 06:41:11 found over Wi-Fi; 06:41:13 **streaming over Wi-Fi** (6 s after unplug).
+Result ✔ — identical to the first full test, now with exact timings.
