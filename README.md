@@ -53,7 +53,7 @@ cd ~/Code/Mic-Setup
 
 `install.sh` copies two scripts to `~/.local/bin`, three user services to `~/.config/systemd/user`, a launcher to the app grid
 and, on GNOME, a small Quick Settings extension, then starts everything. No sudo, nothing system-wide. Re-run it any time; it is safe.
-`./uninstall.sh` removes all of it.
+Afterwards the cloned folder can be deleted: everything was copied into place. `phone-mic uninstall` removes all of it again.
 
 After the first install, **log out and back in once**: that puts `phone-mic` on your PATH and loads the GNOME tile
 (top-right menu → **Phone Mic**: shows Off / Waiting for phone / Streaming, click to toggle; a phone icon sits in the top bar while streaming).
