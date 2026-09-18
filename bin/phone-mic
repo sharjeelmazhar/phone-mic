@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # phone-mic — small control command for the phone-as-microphone setup.
-#   phone-mic on | off | toggle | enable | disable | state | status | log | test | default | doctor | kdeconnect [add|remove]
+#   phone-mic on | off | toggle | enable | disable | state | status | log | test | default | doctor | kdeconnect [add|remove] | uninstall
 
 UNITS="adb-server.service phone-mic-device.service phone-mic.service"
 notify() { command -v notify-send >/dev/null && notify-send -i audio-input-microphone "Phone Mic" "$1"; echo "$1"; }
@@ -54,5 +54,17 @@ The commands then appear in the KDE Connect app on the phone under "Run Command"
 EOF
         fi
         exit $rc ;;
-    *) echo "usage: phone-mic on|off|toggle|enable|disable|state|status|log|test|default|doctor|kdeconnect [add|remove]"; exit 2 ;;
+    uninstall)   # remove everything install.sh put in place; works without the source folder
+        "$0" kdeconnect remove >/dev/null 2>&1
+        systemctl --user disable --now phone-mic.service phone-mic-device.service adb-server.service 2>/dev/null
+        rm -f ~/.config/systemd/user/adb-server.service ~/.config/systemd/user/phone-mic.service ~/.config/systemd/user/phone-mic-device.service
+        systemctl --user daemon-reload
+        UUID=phone-mic@sharjeelmazhar.github.io
+        gnome-extensions disable $UUID 2>/dev/null; rm -rf ~/.local/share/gnome-shell/extensions/$UUID
+        rm -f ~/.local/share/applications/phone-mic-toggle.desktop
+        [ "$(pactl get-default-source 2>/dev/null)" = phone_mic ] && pactl set-default-source @DEFAULT_SOURCE@ 2>/dev/null
+        echo "Removed services, tile, launcher and KDE Connect buttons. Kept ~/.config/phone-mic/ (delete it by hand if you want)."
+        echo "On the phone you can now switch off Developer options > USB debugging."
+        rm -f ~/.local/bin/phone-mic-stream ~/.local/bin/phone-mic-gsconnect.js ~/.local/bin/phone-mic ;;
+    *) echo "usage: phone-mic on|off|toggle|enable|disable|state|status|log|test|default|doctor|kdeconnect [add|remove]|uninstall"; exit 2 ;;
 esac

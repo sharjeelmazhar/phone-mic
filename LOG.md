@@ -173,3 +173,10 @@ Result ✔ — identical to the first full test, now with exact timings.
   changed) · install.sh end to end · stored command paths. Unpaired-device branch not exercised (needs a second, unpaired phone).
 - KDE Plasma's KDE Connect is not automated (no way to test here); the command prints the exact lines to add by hand.
 - README: section + two screenshots (docs/kdeconnect-*.jpg), Tested table row, uninstall note.
+
+### 07:50 — `phone-mic uninstall`
+- Installed files never reference the source folder (verified by grep over everything installed + the GSConnect entries), so the
+  folder can be deleted after `./install.sh`. To make removal possible without re-cloning, `phone-mic uninstall` was added;
+  `uninstall.sh` now just calls it. It also resets the default input if it was Phone Mic.
+- Real test on this machine: uninstall → no files, units, tile, launcher, GSConnect entries or virtual mic left; reinstall →
+  everything back, GSConnect buttons re-added, streaming after 1 s.

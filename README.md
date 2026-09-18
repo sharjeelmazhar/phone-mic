@@ -174,6 +174,7 @@ phone-mic test       record 5 s, show level, play back
 phone-mic log        recent log lines
 phone-mic doctor     status + log — paste this when asking for help
 phone-mic kdeconnect [add|remove]   buttons in the phone's KDE Connect app (see above)
+phone-mic uninstall  remove everything (no need to keep the cloned folder)
 ```
 
 Config: `~/.config/phone-mic/config` (created from `config.example`). Options: `AUDIO_SOURCE` (`mic`, `mic-voice-communication`
@@ -228,5 +229,6 @@ cannot target a stream; streams do not re-link after a loopback restart) for any
 
 ## Uninstall
 
-`./uninstall.sh` — removes the services, scripts, launcher, the GNOME tile and the KDE Connect buttons. Then on the phone: Developer options → USB debugging OFF
+`phone-mic uninstall` — removes the services, scripts, launcher, the GNOME tile and the KDE Connect buttons. Works from anywhere;
+the cloned folder is not needed (`./uninstall.sh` in the folder does the same). Only `~/.config/phone-mic/` is kept. Then on the phone: Developer options → USB debugging OFF
 (and *Revoke USB debugging authorisations* if you like).
