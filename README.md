@@ -66,7 +66,7 @@ While the phone is on USB, the setup also switches on adb-over-Wi-Fi on the phon
 | Computer restarts / you log in | services start, phone is found over Wi-Fi (or USB) within seconds | nothing |
 | Phone plugged in via USB | streams over USB (most reliable; also charges) | nothing |
 | Cable unplugged | drops for ~5 s, continues over Wi-Fi | nothing |
-| Phone leaves the house / Wi-Fi off / battery dead | noticed within ~15 s (the phone stops answering), tile shows *Waiting for phone*; service keeps waiting quietly | nothing; it resumes when the phone is back |
+| Phone leaves the house / Wi-Fi off / battery dead | noticed within ~8 s (the phone stops answering), tile shows *Waiting for phone*; service keeps waiting quietly | nothing; it resumes when the phone is back |
 | Phone **rebooted** | Android forgets adb-over-Wi-Fi (a security feature, cannot be avoided) | plug USB in for ~5 s once, then unplug |
 | Phone gets a **new IP address** from the router | Wi-Fi connect fails | plug USB in for ~5 s once; or give the phone a fixed IP in the router so this never happens |
 | Computer suspended and resumed | stale connection is detected, stream restarts | nothing |

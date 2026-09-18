@@ -107,7 +107,7 @@ esac
 
 # Over Wi-Fi a dead connection (phone Wi-Fi off, out of range) is not noticed by adb or scrcpy: they just
 # wait forever. So ask the phone for a trivial reply through the same connection; no answer in 5 s = gone.
-alive() { case "$serial" in *:*) timeout 5 adb -s "$serial" shell true >/dev/null 2>&1 ;; *) return 0 ;; esac; }
+alive() { case "$serial" in *:*) timeout 3 adb -s "$serial" shell true >/dev/null 2>&1 ;; *) return 0 ;; esac; }
 if ! alive; then
     log "phone at $serial does not answer; dropping the stale connection"
     timeout 3 adb disconnect "$serial" >/dev/null 2>&1
@@ -137,7 +137,7 @@ linked()    { pw-link -l 2>/dev/null | grep -q "$TARGET:input_"; }
 t=0; taken=0; stale=0
 while kill -0 $pid 2>/dev/null; do
     if [ $taken = 0 ] && linked; then take_default; taken=1; fi
-    if [ $((t % 10)) = 9 ] && ! alive; then
+    if [ $((t % 5)) = 4 ] && ! alive; then
         log "phone stopped answering (Wi-Fi off / out of range?); restarting"; kill $pid 2>/dev/null; stale=1; break
     fi
     if misrouted; then
