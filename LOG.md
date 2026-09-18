@@ -65,7 +65,7 @@ works over USB *and* Wi-Fi, low latency. Trade-off: needs USB debugging enabled 
 - Folder put under git.
 
 **Still open**
-- [ ] User: reboot computer and confirm everything comes up alone.
+- [x] Computer reboot (05:25): all three services up, phone found over Wi-Fi with no cable, speakers + Phone Mic confirmed by user.
 - [ ] Behaviour with phone screen off / locked for >10 min.
 
 ### 05:15–05:40 — polish for public repo
