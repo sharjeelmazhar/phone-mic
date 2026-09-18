@@ -74,3 +74,13 @@ works over USB *and* Wi-Fi, low latency. Trade-off: needs USB debugging enabled 
 - Stale Wi-Fi adb connection is dropped when a Wi-Fi session dies within 20 s (suspend/resume case). Not yet tested with a real suspend.
 - Identifiers (serial, IPs) scrubbed from this log for publishing. README rewritten for fresh installs and other users.
 - Tested: off → inactive, on → streaming again within ~8 s.
+
+### 05:40–06:05 — regression caught, second safety guard
+- **Regression (my fault):** while adding a timestamp I broke the line continuation before `scrcpy`, so it started *without*
+  `PIPEWIRE_NODE`/`PIPEWIRE_PROPS` and WirePlumber sent the phone mic to the speakers for ~15 min. Fixed the line order.
+- **New guard in `phone-mic-stream`:** the stream node is now named `phone_mic_stream`; every second the script checks
+  its links and kills scrcpy at once if it is linked to anything except `phone_mic_in` (log: `SAFETY STOP`).
+  Test: forced a link to the speakers with `pw-link` → stopped within 1 s, back on the virtual mic only after 3 s ✔
+- **Observed:** with the phone screen off and no active stream, HyperOS Wi-Fi power-save made the phone unreachable for ~30 s
+  (ping loss, port 5555 closed), then it came back and the service reconnected alone. So a reconnect can take up to a minute
+  when the phone is asleep; while streaming, the link stays up. Documented in README.

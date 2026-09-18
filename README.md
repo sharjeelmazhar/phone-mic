@@ -62,7 +62,7 @@ While the phone is on USB, the setup also switches on adb-over-Wi-Fi on the phon
 | Phone gets a **new IP address** from the router | Wi-Fi connect fails | plug USB in for ~5 s once; or give the phone a fixed IP in the router so this never happens |
 | Computer suspended and resumed | stale connection is detected, stream restarts | nothing |
 | PipeWire / audio restarts on the computer | watchdog notices the lost link within 5 s and restarts the stream | nothing |
-| Phone screen off / locked | keeps streaming (Android shows the green mic dot) | nothing |
+| Phone screen off / locked | keeps streaming (Android shows the green mic dot). If it has to *re*connect while the phone sleeps, Wi-Fi power-save can delay that by up to a minute | nothing |
 | Phone call on the phone | Android gives the call priority; the stream may go silent during the call and resumes after | nothing |
 | Headphones plugged into the computer | sound output switches to headphones as usual; input stays Phone Mic | nothing |
 | Want the wired headset mic instead | | Settings → Sound → Input → pick it; `phone-mic default` to switch back |
@@ -125,7 +125,7 @@ phone mic ─(adb over USB or Wi-Fi)─> scrcpy --audio-source=mic ─> phone_mi
 |---|---|
 | `adb-server.service` | the adb server, in its own unit so mic restarts never kill your own scrcpy/adb sessions |
 | `phone-mic-device.service` | `pw-loopback`: an input stream `phone_mic_in` (invisible to apps, so nothing appears under *Output*) feeding the virtual source `phone_mic` ("Phone Mic") |
-| `phone-mic.service` → `phone-mic-stream` | finds the phone (USB first, then Wi-Fi), enables `adb tcpip 5555` and saves the phone IP while on USB, runs `scrcpy --no-video --audio-source=mic` with SDL's PipeWire output pinned to `phone_mic_in` (`node.dont-move`, `node.dont-fallback`), watchdog re-links after audio restarts, exits so systemd retries when the phone goes away |
+| `phone-mic.service` → `phone-mic-stream` | finds the phone (USB first, then Wi-Fi), enables `adb tcpip 5555` and saves the phone IP while on USB, runs `scrcpy --no-video --audio-source=mic` with SDL's PipeWire output pinned to `phone_mic_in` (`node.dont-move`, `node.dont-fallback`), two watchdogs (kills the stream within 1 s if it is ever linked to anything but `phone_mic_in`; restarts it if the link is lost), exits so systemd retries when the phone goes away |
 
 `LOG.md` records the setup session, including the dead ends (virtual sinks show up as output devices; the PulseAudio API
 cannot target a stream; streams do not re-link after a loopback restart) for anyone adapting this.

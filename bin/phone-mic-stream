@@ -21,6 +21,7 @@ WIFI=1                            # 1 = also use the phone over Wi-Fi when no US
 PHONE_ADDR=""                     # optional fixed ip:port; normally learned automatically over USB
 PHONE_SERIAL=""                   # optional: only use the phone with this USB serial (see `adb devices`) if several Android devices are around
 TARGET="phone_mic_in"              # input side of the pw-loopback from phone-mic-device.service
+STREAM="phone_mic_stream"          # node name given to the scrcpy audio stream
 [ -f "$CONF" ] && . "$CONF"
 
 log() { echo "[phone-mic] $*"; }
@@ -90,24 +91,32 @@ esac
 log "streaming microphone (source=$AUDIO_SOURCE codec=$AUDIO_CODEC buffer=${AUDIO_BUFFER}ms) -> $TARGET"
 # Native PipeWire output (the PulseAudio API cannot target a stream, only real sinks).
 # dont-move / dont-fallback: the stream may only ever be linked to $TARGET, never to the speakers.
-SDL_AUDIODRIVER=pipewire PIPEWIRE_NODE="$TARGET" \
-PIPEWIRE_PROPS="{ node.dont-move=true node.dont-fallback=true node.dont-reconnect=false }" \
 started=$(date +%s)
+SDL_AUDIODRIVER=pipewire PIPEWIRE_NODE="$TARGET" \
+PIPEWIRE_PROPS="{ node.name=$STREAM node.description=\"Phone Mic stream\" node.dont-move=true node.dont-fallback=true node.dont-reconnect=false }" \
     scrcpy -s "$serial" --no-video --no-control --no-window \
            --audio-source="$AUDIO_SOURCE" --audio-codec="$AUDIO_CODEC" --audio-buffer="$AUDIO_BUFFER" &
 pid=$!
 trap 'kill $pid 2>/dev/null; wait $pid 2>/dev/null; exit 0' TERM INT   # clean stop via phone-mic off
 
-# Watchdog: if the stream is not linked to $TARGET (e.g. PipeWire or the virtual mic was restarted),
-# stop scrcpy so that systemd starts everything fresh. The stream does not re-link by itself.
-sleep 12
+# Watchdogs:
+#  - misrouted: the scrcpy stream got linked to anything but $TARGET (e.g. the speakers) -> kill it at once.
+#  - unlinked: after the start-up grace period it is not linked to $TARGET (PipeWire or the virtual mic was
+#    restarted; streams do not re-link by themselves) -> restart via systemd.
+misrouted() { pw-link -l 2>/dev/null | awk -v n="$STREAM" -v t="$TARGET" '
+    /^[^ ]/            { s = (index($0, n ":output_") == 1); next }
+    s && /\|->/        { if (index($0, t ":") == 0) bad = 1 }
+    END                { exit !bad }'; }
+linked()    { pw-link -l 2>/dev/null | grep -q "$TARGET:input_"; }
+t=0
 while kill -0 $pid 2>/dev/null; do
-    if ! pw-link -l 2>/dev/null | grep -q "$TARGET:input_"; then
-        log "stream is not linked to $TARGET any more; restarting"
-        kill $pid 2>/dev/null
-        break
+    if misrouted; then
+        log "SAFETY STOP: stream was linked to something other than $TARGET"; kill $pid 2>/dev/null; break
     fi
-    sleep 5
+    if [ $t -ge 12 ] && ! linked; then
+        log "stream is not linked to $TARGET any more; restarting"; kill $pid 2>/dev/null; break
+    fi
+    sleep 1; t=$((t+1))
 done
 wait $pid; rc=$?
 log "scrcpy ended (exit $rc); will retry"
