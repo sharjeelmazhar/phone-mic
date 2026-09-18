@@ -134,3 +134,19 @@ cannot target a stream; streams do not re-link after a loopback restart) for any
 
 `./uninstall.sh` — removes the services, scripts and launcher. Then on the phone: Developer options → USB debugging OFF
 (and *Revoke USB debugging authorisations* if you like).
+
+## Git on a fresh computer (for the owner of this repo)
+
+```bash
+sudo apt install gh git
+gh auth login                      # GitHub.com, HTTPS, login with browser
+git config --global user.name "Sharjeel Mazhar"
+git config --global user.email "sharjeelmazhar@gmail.com"
+# signed commits (green "Verified" badge) with an SSH key:
+ssh-keygen -t ed25519 -C "git signing" -f ~/.ssh/id_ed25519_signing -N ""
+git config --global gpg.format ssh
+git config --global user.signingkey ~/.ssh/id_ed25519_signing.pub
+git config --global commit.gpgsign true
+gh auth refresh -h github.com -s admin:ssh_signing_key
+gh ssh-key add ~/.ssh/id_ed25519_signing.pub --type signing --title "$(hostname) git signing"
+```
