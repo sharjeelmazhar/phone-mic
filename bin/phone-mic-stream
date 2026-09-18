@@ -137,7 +137,7 @@ linked()    { pw-link -l 2>/dev/null | grep -q "$TARGET:input_"; }
 t=0; taken=0; stale=0
 while kill -0 $pid 2>/dev/null; do
     if [ $taken = 0 ] && linked; then take_default; taken=1; fi
-    if [ $((t % 5)) = 4 ] && ! alive; then
+    if [ $((t % 4)) = 3 ] && ! alive; then
         log "phone stopped answering (Wi-Fi off / out of range?); restarting"; kill $pid 2>/dev/null; stale=1; break
     fi
     if misrouted; then
