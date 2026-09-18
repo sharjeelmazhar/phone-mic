@@ -62,7 +62,7 @@ works over USB *and* Wi-Fi, low latency. Trade-off: needs USB debugging enabled 
 - **scrcpy mirror + mic simultaneously over Wi-Fi:** `scrcpy --no-audio --no-window --record … --time-limit=5` produced 2.5 MB video, mic had 0 restarts, peak 19579 ✔
   (The `MediaCodec Error 0xfffffff4` printed at the end of that test is just the encoder being stopped by `--time-limit`.)
 - Phone Developer options reviewed (screenshot 04:44): USB debugging ON, Security settings ON, adb authorisation timeout disabled ON, Install via USB OFF → all fine, nothing to turn off (see README table).
-- Folder put under git for upload to GitHub.
+- Folder put under git.
 
 **Still open**
 - [ ] User: reboot computer and confirm everything comes up alone.
