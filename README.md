@@ -82,7 +82,7 @@ While the phone is on USB, the setup also switches on adb-over-Wi-Fi on the phon
 | Another Android device plugged into the computer | the script may pick it | set `PHONE_SERIAL` in the config (see below) |
 | Reinstalled the computer | new adb key → phone asks "Allow USB debugging?" again | steps 1 and 3 |
 | USB debugging turned **off** on the phone (some banking apps insist) | mic stops; computer side just waits | turn it back on afterwards; if Wi-Fi mode doesn't return within a minute, plug USB once |
-| **Changed phone** | the setup is not tied to one phone: whichever authorised phone is on USB (or at the saved Wi-Fi address) is used | new phone: step 2, then plug it in and accept the prompt (step 3). Old phone: Developer options → USB debugging off (or *Revoke USB debugging authorisations*). Both around at once? set `PHONE_SERIAL` |
+| **Switch to another phone** (no restarts needed) | only one phone streams at a time; the phone present at start wins, USB before Wi-Fi | new phone: Developer options as in step 2. Then: 1. `phone-mic off` (or the tile) 2. plug the new phone in, accept the prompt 3. `phone-mic on` → it streams over USB; unplug and it continues over Wi-Fi. Same three steps to switch back. Two phones plugged in at once? set `PHONE_SERIAL` |
 
 ### Laptops / computers that already have a microphone
 

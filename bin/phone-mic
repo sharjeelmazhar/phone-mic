@@ -7,7 +7,8 @@ notify() { command -v notify-send >/dev/null && notify-send -i audio-input-micro
 
 case "${1:-status}" in
     on)      systemctl --user start $UNITS && notify "ON — streaming starts as soon as the phone is reachable" ;;
-    off)     systemctl --user stop phone-mic.service && notify "OFF — phone microphone released (until 'phone-mic on' or next login)" ;;
+    off)     systemctl --user stop phone-mic.service && timeout 5 adb disconnect >/dev/null 2>&1   # also drop Wi-Fi links (clean switch to another phone)
+             notify "OFF — phone microphone released (until 'phone-mic on' or next login)" ;;
     enable)  systemctl --user enable --now $UNITS >/dev/null 2>&1 && echo "autostart ON: phone mic connects automatically at every login" ;;
     disable) systemctl --user disable --now phone-mic.service >/dev/null 2>&1 && echo "autostart OFF and stopped: use 'phone-mic on' when you want it, 'phone-mic enable' to make it automatic again" ;;
     toggle)  if systemctl --user is-active -q phone-mic.service; then "$0" off; else "$0" on; fi ;;
