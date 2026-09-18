@@ -82,7 +82,7 @@ While the phone is on USB, the setup also switches on adb-over-Wi-Fi on the phon
 | Another Android device plugged into the computer | the script may pick it | set `PHONE_SERIAL` in the config (see below) |
 | Reinstalled the computer | new adb key → phone asks "Allow USB debugging?" again | steps 1 and 3 |
 | USB debugging turned **off** on the phone (some banking apps insist) | mic stops; computer side just waits | turn it back on afterwards; if Wi-Fi mode doesn't return within a minute, plug USB once |
-| **Switch to another phone** (no restarts needed) | only one phone streams at a time; the phone present at start wins, USB before Wi-Fi | new phone: Developer options as in step 2. Then: 1. `phone-mic off` (or the tile) 2. plug the new phone in, accept the prompt 3. `phone-mic on` → it streams over USB; unplug and it continues over Wi-Fi. Same three steps to switch back. Two phones plugged in at once? set `PHONE_SERIAL` |
+| **Switch to another phone** | only one phone streams at a time | see *Switching to another phone* below — no restarts of anything |
 
 ### Laptops / computers that already have a microphone
 
@@ -94,6 +94,20 @@ inside the app (Zoom, Discord, browser...). The choice is remembered across rebo
 - Laptop, want the phone whenever it is around and the built-in mic otherwise: set `AUTO_DEFAULT=1` in the config.
   Phone Mic becomes the default input only while the phone is streaming; when it stops, the previous input is restored.
   (If you pick a different input yourself in the meantime, it is left alone.)
+
+### Switching to another phone
+
+No reboot of the computer or of either phone. Only one phone streams at a time; the phone that is present when streaming
+starts is used, USB before Wi-Fi.
+
+1. On the other phone, enable USB debugging once (section 2).
+2. Turn the mic off: the **Phone Mic** tile, or `phone-mic off`. This releases the current phone, including its Wi-Fi link.
+3. Plug the other phone in, unlock it, accept "Allow USB debugging?" with *Always allow*.
+4. Turn the mic on again: the tile, or `phone-mic on`. It streams from the new phone over USB; unplug the cable and it
+   continues over Wi-Fi (its address was saved while on USB).
+
+Switching back is the same four steps with the first phone. If two phones with debugging on are plugged in at the same time,
+set `PHONE_SERIAL` in the config to say which one to use.
 
 ### Privacy
 
