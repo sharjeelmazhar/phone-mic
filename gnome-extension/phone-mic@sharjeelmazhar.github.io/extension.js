@@ -10,7 +10,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {QuickToggle, SystemIndicator} from 'resource:///org/gnome/shell/ui/quickSettings.js';
 
 const PHONE_MIC = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'phone-mic']);
-const POLL_SECONDS = 5;
+const POLL_SECONDS = 3;
 
 // Run `phone-mic <args>` without blocking the shell; resolves to trimmed stdout ('' on any error).
 function phoneMic(...args) {

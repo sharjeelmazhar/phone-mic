@@ -119,3 +119,16 @@ Result: ✔ worst case handled with a single ~40 s cable plug; IP change handled
      The integrated path (called when the stream links) is not yet observed live — the phone was unreachable on Wi-Fi during the test.
 - Observed again: the phone dropped off Wi-Fi (no ping) for several minutes while idle; service kept waiting as designed.
 - User confirmed: after reboot the tile appears in Quick Settings and toggles the mic.
+
+### 06:20–06:35 — phone Wi-Fi off was not detected
+- **User report:** phone Wi-Fi switched off → tile kept saying *Streaming*; only `off`/`on` got it back to *Waiting for phone*.
+  Cause: a dead TCP connection is invisible to adb and scrcpy (no keepalive); scrcpy blocks on read forever and the PipeWire
+  stream stays linked, so `phone-mic state` truthfully reported "streaming" (link exists) while no audio arrived.
+- The "turned off by itself" from the same test: journal shows two stops at 06:21:07 and 06:21:10 = clicks on the tile while
+  it was stuck showing *Streaming* (so a click meant "off"). Not a bug in the stop logic; fixed by making the state truthful.
+- **Fix in `phone-mic-stream`:** `alive()` = `timeout 5 adb -s <ip:5555> shell true`. Checked once before starting scrcpy
+  (a dead adb entry is dropped immediately instead of `adb push` hanging 12 s) and every 10 s while streaming; on failure the
+  stream is stopped, the stale adb connection dropped, and the normal reconnect loop takes over (~15 s to notice). USB sessions
+  are unaffected (USB unplug is detected instantly anyway).
+- Tile poll interval 5 s → 3 s (takes effect after the next login).
+- Verified: no false restarts while streaming normally over Wi-Fi. Not yet verified with the phone's Wi-Fi actually off — user to test.
