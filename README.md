@@ -7,9 +7,14 @@ called **"Phone Mic"** in every app: dictation, WhatsApp, Discord, browsers, Zoo
 - **USB cable or Wi-Fi.** Same home network is enough. USB is used when plugged in, Wi-Fi otherwise.
 - **Zero-touch after setup.** Starts at login, reconnects by itself when the phone comes and goes, survives computer reboots.
 - **Does not interfere** with anything else: the phone works normally (calls, apps, screen off); the computer's sound output, headphones and other mics stay as they were. Nothing system-wide is changed on the computer (no sudo, nothing runs as root, all per-user).
-- **One command to cut the mic** for privacy: `phone-mic off`.
+- **One click to cut the mic** for privacy: a tile in GNOME's Quick Settings menu (or `phone-mic off`).
 
-Built and tested on Ubuntu 26.04 (GNOME, PipeWire 1.6, WirePlumber 0.5) with a Redmi Note 11 (HyperOS 1.0, Android 13).
+<p align="center"><img src="docs/quick-settings-tile.png" width="340" alt="GNOME Quick Settings menu with the Phone Mic tile showing Streaming, and a phone icon in the top bar"></p>
+
+*The top-right menu on Ubuntu 26.04 LTS: the **Phone Mic** tile shows Off / Waiting for phone / Streaming and toggles the mic with one click.
+While streaming, a small phone icon sits in the top bar.*
+
+Built and tested on Ubuntu 26.04 LTS (GNOME, PipeWire 1.6, WirePlumber 0.5) with a Redmi Note 11 (HyperOS 1.0, Android 13).
 Needs Android 11 or newer (mic capture over adb) and a Linux desktop running PipeWire (default on Ubuntu 22.10+, Fedora, Arch...).
 
 ## 1. Install (computer)
