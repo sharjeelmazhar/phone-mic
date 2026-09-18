@@ -132,3 +132,10 @@ Result: ✔ worst case handled with a single ~40 s cable plug; IP change handled
   are unaffected (USB unplug is detected instantly anyway).
 - Tile poll interval 5 s → 3 s (takes effect after the next login).
 - Verified: no false restarts while streaming normally over Wi-Fi. Not yet verified with the phone's Wi-Fi actually off — user to test.
+
+### 06:33–06:40 — timed Wi-Fi off/on tests, restart-gap display fix
+- Two timed rounds with a 1 s state watch. Phone Wi-Fi off → *waiting* in ~7 s (incl. user reaction time); Wi-Fi on → *streaming*
+  in 9–16 s (phone re-joining Wi-Fi + 4 s retry rhythm). Liveness check: every 4 s, 3 s timeout.
+- The watch exposed a cosmetic bug: for the 3 s systemd restart gap after a reconnect, `phone-mic state` said *off*
+  (unit ActiveState=activating). The tile therefore flashed "Off" — very likely the earlier "it turned off by itself" report.
+  Fix: `state` treats active/activating/reloading as running; only inactive/failed is *off*. Verified by killing scrcpy: no *off* during the gap.

@@ -12,9 +12,12 @@ case "${1:-status}" in
     disable) systemctl --user disable --now phone-mic.service >/dev/null 2>&1 && echo "autostart OFF and stopped: use 'phone-mic on' when you want it, 'phone-mic enable' to make it automatic again" ;;
     toggle)  if systemctl --user is-active -q phone-mic.service; then "$0" off; else "$0" on; fi ;;
     state)   # one word for scripts / the GNOME tile: off | waiting | streaming
-        if ! systemctl --user is-active -q phone-mic.service; then echo off
-        elif pw-link -l 2>/dev/null | grep -q "phone_mic_in:input_"; then echo streaming
-        else echo waiting; fi ;;
+        # "activating" = systemd is about to restart the script (3 s gap after a reconnect): that is not "off".
+        case "$(systemctl --user show phone-mic.service -p ActiveState --value 2>/dev/null)" in
+            active|activating|reloading) ;;
+            *) echo off; exit 0 ;;
+        esac
+        if pw-link -l 2>/dev/null | grep -q "phone_mic_in:input_"; then echo streaming; else echo waiting; fi ;;
     default) pactl set-default-source phone_mic && echo "Phone Mic is now the default input device" ;;
     log)     journalctl --user -u phone-mic.service -u phone-mic-device.service -n "${2:-40}" --no-pager ;;
     status)
