@@ -67,7 +67,11 @@ for (const id of ids) {
     const packed = {};
     for (const [key, cmd] of Object.entries(cmds))
         packed[key] = new GLib.Variant('a{ss}', {name: String(cmd.name), command: String(cmd.command)});
-    rc.set_value('command-list', new GLib.Variant('a{sv}', packed));
+    const value = new GLib.Variant('a{sv}', packed);
+    if (mode === 'remove' && value.equal(rc.get_default_value('command-list')))
+        rc.reset('command-list');          // nothing but ours was ever added: leave the key exactly as GSConnect ships it
+    else
+        rc.set_value('command-list', value);
     print(`${mode === 'add' ? 'added to' : 'removed from'} "${name}": Phone Mic ON / OFF / TOGGLE`);
     touched++;
 }

@@ -229,6 +229,21 @@ cannot target a stream; streams do not re-link after a loopback restart) for any
 
 ## Uninstall
 
-`phone-mic uninstall` — removes the services, scripts, launcher, the GNOME tile and the KDE Connect buttons. Works from anywhere;
-the cloned folder is not needed (`./uninstall.sh` in the folder does the same). Only `~/.config/phone-mic/` is kept. Then on the phone: Developer options → USB debugging OFF
-(and *Revoke USB debugging authorisations* if you like).
+`phone-mic uninstall` (from anywhere; the cloned folder is not needed — `./uninstall.sh` in the folder does the same).
+It undoes everything the install and the scripts ever created or changed, so the system is back to how it was:
+
+| Removed | Where |
+|---|---|
+| the three commands `phone-mic`, `phone-mic-stream`, `phone-mic-gsconnect.js` | `~/.local/bin` |
+| the three services, their autostart links, the running processes | `~/.config/systemd/user` |
+| the virtual "Phone Mic" input device | PipeWire (gone immediately) |
+| the app-grid launcher | `~/.local/share/applications` |
+| the GNOME tile: extension files and its entry in GNOME's enabled-extensions list | `~/.local/share/gnome-shell/extensions`, gsettings |
+| the three Phone Mic entries in GSConnect's Run Command list (key reset to GSConnect's default if nothing else was ever added) | GSConnect settings |
+| config, saved phone address, saved previous input | `~/.config/phone-mic` |
+| Phone Mic as default input (if `phone-mic default` was used) | switched to the first real microphone |
+| adb-over-Wi-Fi mode on the phone (switched on by the install) | back to USB-only on every reachable phone; adb connections dropped |
+
+Not touched, because they are not this project's: adb's own key pair in `~/.android` (created by adb the first time it ran),
+the phone's Developer options / USB debugging (switch off by hand if you like, plus *Revoke USB debugging authorisations*),
+and old log lines in the system journal. Verified on the test machine by uninstalling and checking every item above.

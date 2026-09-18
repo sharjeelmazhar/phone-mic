@@ -180,3 +180,13 @@ Result ✔ — identical to the first full test, now with exact timings.
   `uninstall.sh` now just calls it. It also resets the default input if it was Phone Mic.
 - Real test on this machine: uninstall → no files, units, tile, launcher, GSConnect entries or virtual mic left; reinstall →
   everything back, GSConnect buttons re-added, streaming after 1 s.
+
+### 08:00 — uninstall audited against everything install creates or changes
+- Gaps found and closed: `~/.config/phone-mic` was kept (now removed); the UUID stayed in `enabled-extensions` if the shell had
+  never loaded the tile (now removed from the list directly); GSConnect key stayed explicitly set (now reset when equal to the schema
+  default); default-input reset used an invalid name (now the first real mic); phone stayed in adb-tcpip mode (now `adb usb` on every
+  reachable phone + `adb disconnect`).
+- Real uninstall on this machine, checked: files 0, autostart links 0, units 0, extension dir 0, enabled-extensions 0, config dir 0,
+  GSConnect key unset, virtual mic 0, adb devices 0, phone port 5555 closed. Then reinstalled; config restored from a backup taken before
+  the test. Because `adb usb` ran, Wi-Fi mode needs the one-time USB plug again.
+- Leftovers that are deliberately not ours to delete are listed in the README (adb key, phone Developer options, journal).

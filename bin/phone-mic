@@ -54,17 +54,31 @@ The commands then appear in the KDE Connect app on the phone under "Run Command"
 EOF
         fi
         exit $rc ;;
-    uninstall)   # remove everything install.sh put in place; works without the source folder
-        "$0" kdeconnect remove >/dev/null 2>&1
-        systemctl --user disable --now phone-mic.service phone-mic-device.service adb-server.service 2>/dev/null
+    uninstall)   # undo everything install.sh and the scripts ever created or changed; works without the source folder
+        UUID=phone-mic@sharjeelmazhar.github.io
+        "$0" kdeconnect remove >/dev/null 2>&1                                   # GSConnect: our 3 entries (key reset if nothing else changed)
+        systemctl --user disable --now phone-mic.service phone-mic-device.service 2>/dev/null
+        # phone side: install switched on adb-over-Wi-Fi (adb tcpip 5555); switch it back to USB-only on every reachable phone
+        for d in $(adb devices 2>/dev/null | awk 'NR>1 && $2=="device"{print $1}'); do timeout 5 adb -s "$d" usb >/dev/null 2>&1; done
+        timeout 5 adb disconnect >/dev/null 2>&1
+        systemctl --user disable --now adb-server.service 2>/dev/null
         rm -f ~/.config/systemd/user/adb-server.service ~/.config/systemd/user/phone-mic.service ~/.config/systemd/user/phone-mic-device.service
         systemctl --user daemon-reload
-        UUID=phone-mic@sharjeelmazhar.github.io
         gnome-extensions disable $UUID 2>/dev/null; rm -rf ~/.local/share/gnome-shell/extensions/$UUID
+        cur=$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null)                    # install added the UUID here
+        if grep -q "'$UUID'" <<<"$cur"; then
+            new=$(python3 -c "import ast,sys; l=[x for x in ast.literal_eval(sys.argv[1]) if x!=sys.argv[2]]; print(repr(l) if l else '@as []')" "${cur#@as }" "$UUID")
+            gsettings set org.gnome.shell enabled-extensions "$new" 2>/dev/null
+        fi
         rm -f ~/.local/share/applications/phone-mic-toggle.desktop
-        [ "$(pactl get-default-source 2>/dev/null)" = phone_mic ] && pactl set-default-source @DEFAULT_SOURCE@ 2>/dev/null
-        echo "Removed services, tile, launcher and KDE Connect buttons. Kept ~/.config/phone-mic/ (delete it by hand if you want)."
-        echo "On the phone you can now switch off Developer options > USB debugging."
-        rm -f ~/.local/bin/phone-mic-stream ~/.local/bin/phone-mic-gsconnect.js ~/.local/bin/phone-mic ;;
+        rm -rf ~/.config/phone-mic                                                 # config, saved phone address, saved previous input
+        if [ "$(pactl get-default-source 2>/dev/null)" = phone_mic ]; then       # `phone-mic default` had made Phone Mic the default input
+            real=$(pactl list short sources 2>/dev/null | awk '$2 !~ /\.monitor$/ && $2 != "phone_mic" {print $2; exit}')
+            [ -n "$real" ] && pactl set-default-source "$real" 2>/dev/null
+        fi
+        rm -f ~/.local/bin/phone-mic-stream ~/.local/bin/phone-mic-gsconnect.js
+        echo "Removed: services, commands, launcher, GNOME tile, KDE Connect buttons, ~/.config/phone-mic, virtual mic; adb on the phone back to USB-only."
+        echo "Not touched (not ours): adb's own key in ~/.android, the phone's Developer options, old lines in the system journal."
+        rm -f ~/.local/bin/phone-mic ;;
     *) echo "usage: phone-mic on|off|toggle|enable|disable|state|status|log|test|default|doctor|kdeconnect [add|remove]|uninstall"; exit 2 ;;
 esac
