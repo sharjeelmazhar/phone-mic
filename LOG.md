@@ -238,4 +238,14 @@ Time Tracker app, instead of cloning the repo and running `install.sh`.
   after a shell restart the extension is loaded from `/usr/share/gnome-shell/extensions` and *ACTIVE* with no JS errors, on
   GNOME 50 (26.04) and GNOME 46 (24.04). Not seen: the tile itself on 46 (headless shell has no screen).
 - 24.04: installs without scrcpy (recommendation not satisfiable), `PROBLEM: scrcpy is not installed…` in status and log ✔.
-- Not tested: the real GitHub release → apt path before the first release existed; Debian.
+- Not tested: streaming from a phone with the packaged version; the tile on screen on GNOME 46; Debian.
+
+### 14:05 UTC — first release, v1.0.0
+- Repo side set up once: `APT_SIGNING_KEY` secret, GitHub Pages with "GitHub Actions" as source, and the `github-pages`
+  environment allowed to deploy from `main` and from `v*` tags (by default only the default branch may deploy).
+- The first push of the tag (together with the new branch that introduced the workflow, during a GitHub incident) created
+  no workflow run at all. Pushing the same tag again started it. If a tag push ever shows nothing under Actions: delete the
+  tag on GitHub and push it again.
+- Checked against the published files in both VMs: `wget …/releases/latest/download/phone-mic.deb`, `sudo apt install ./phone-mic.deb`,
+  then `sudo apt update` fetches `InRelease` and `Packages` from `https://sharjeelmazhar.github.io/phone-mic` without warnings and
+  `apt policy phone-mic` lists that repository as the source ✔.
