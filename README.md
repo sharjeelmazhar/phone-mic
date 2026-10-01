@@ -9,7 +9,8 @@ built-in mic is poor: Phone Mic is simply one more input to choose, and the buil
 - **Nothing to install on the phone.** Uses Android's built-in debugging link (adb) and [scrcpy](https://github.com/Genymobile/scrcpy).
 - **USB cable or Wi-Fi.** Same home network is enough. USB is used when plugged in, Wi-Fi otherwise.
 - **Zero-touch after setup.** Starts at login, reconnects by itself when the phone comes and goes, survives computer reboots.
-- **Does not interfere** with anything else: the phone works normally (calls, apps, screen off); the computer's sound output, headphones and other mics stay as they were. Nothing system-wide is changed on the computer (no sudo, nothing runs as root, all per-user).
+- **Does not interfere** with anything else: the phone works normally (calls, apps, screen off); the computer's sound output, headphones and other mics stay as they were. Nothing runs as root: the package only puts files in place, the mic itself runs in your own user session.
+- **Updates with the system.** On Ubuntu / Debian it is a `.deb` with its own apt repository: `sudo apt update && sudo apt upgrade` brings new versions.
 - **One click to cut the mic** for privacy: a tile in GNOME's Quick Settings menu (or `phone-mic off`).
 
 <p align="center"><img src="docs/quick-settings-tile.png" width="340" alt="GNOME Quick Settings menu with the Phone Mic tile showing Streaming, and a phone icon in the top bar"></p>
@@ -19,7 +20,8 @@ While streaming, a small phone icon sits in the top bar.*
 
 ## Compatibility — what is tested and what is not
 
-**Tested:** Ubuntu 26.04 LTS with GNOME (PipeWire 1.6, WirePlumber 0.5, scrcpy 3.3) and a Redmi Note 11 (HyperOS 1.0, Android 13). That is the only combination anyone has run this on so far.
+**Tested:** Ubuntu 26.04 LTS with GNOME (PipeWire 1.6, WirePlumber 0.5, scrcpy 3.3) and a Redmi Note 11 (HyperOS 1.0, Android 13). That is the only combination the microphone itself has been used on so far.
+The package (install, upgrade through apt, removal) and the loading of the tile were also checked in clean virtual machines of Ubuntu 26.04 (GNOME 50) and Ubuntu 24.04 (GNOME 46), without a phone.
 
 What the setup needs, and therefore where it should work (untested unless marked):
 
@@ -27,36 +29,59 @@ What the setup needs, and therefore where it should work (untested unless marked
 |---|---|---|
 | **PipeWire + WirePlumber** as the audio server | the virtual mic is a PipeWire loopback; the scrcpy stream is pinned with PipeWire properties | Ubuntu 22.10+, Fedora 34+, Arch, openSUSE, Debian 12+, Manjaro... — *not* a system still on plain PulseAudio |
 | **systemd** user services | the three services | any systemd distro — *not* Void, Alpine, Devuan, Gentoo/OpenRC |
-| **scrcpy ≥ 2.1** with audio support | `--audio-source=mic` | Ubuntu 24.04+ ✔ (tested on 26.04), Arch/Manjaro ✔, Fedora via [scrcpy's install docs](https://github.com/Genymobile/scrcpy/blob/master/doc/linux.md), **Debian 12's scrcpy 1.25 is too old** (build from source or use a newer package) |
+| **scrcpy ≥ 2.1** with audio support | `--audio-source=mic` | Ubuntu 26.04+ ✔ (tested), Arch/Manjaro ✔, Fedora via [scrcpy's install docs](https://github.com/Genymobile/scrcpy/blob/master/doc/linux.md). **Ubuntu 24.04–25.10 and Debian 12 ship scrcpy 1.25, which is too old**: the package installs there, but you have to add a newer scrcpy yourself (scrcpy's install docs put it in `/usr/local/bin`, where it is picked up); `phone-mic status` says so until then |
 | **adb** (android-tools) | the phone link | all distros. On Arch also install `android-udev` for USB access; Debian/Ubuntu ship the udev rules with adb |
 | `pactl`, `parecord`, `paplay` | default-input handling and `phone-mic test` | package `pulseaudio-utils` (Debian/Ubuntu/Fedora) or `libpulse` (Arch), plus `pipewire-pulse` |
 | **Android 11+** on the phone | mic capture over adb | any brand; Xiaomi/HyperOS is what was tested |
 
-Desktop environments: the mic itself is desktop-agnostic. The **Quick Settings tile is GNOME 48–50 only**. On KDE Plasma,
+Desktop environments: the mic itself is desktop-agnostic. The **Quick Settings tile is for GNOME 45–51** (used daily on 50,
+loads on 46; 51 is listed so it is not blocked there, but nobody has tried it yet). On KDE Plasma,
 Cinnamon, XFCE, Sway, etc. use the `phone-mic` commands, the app-grid launcher, or a keyboard shortcut for `phone-mic toggle`
-(notifications still appear). `install.sh` skips the tile when GNOME Shell is not present.
+(notifications still appear). The tile is skipped when GNOME Shell is not present.
 
 If you run this on another distro or desktop, please open an issue with the result — the table above will be updated.
 
 ## 1. Install (computer)
 
+### Ubuntu / Debian: the `.deb`
+
 ```bash
-# Ubuntu 24.04+ / Debian 13+
-sudo apt install adb scrcpy pipewire-bin pulseaudio-utils git
+wget https://github.com/sharjeelmazhar/phone-mic/releases/latest/download/phone-mic.deb
+sudo apt install ./phone-mic.deb
+```
+
+Or download `phone-mic.deb` from the [releases page](https://github.com/sharjeelmazhar/phone-mic/releases) and open it.
+(Tested on Ubuntu; Debian and other apt-based systems should behave the same but nobody has tried yet.)
+
+That is the whole installation. apt brings in what is needed (adb, scrcpy, the PipeWire tools), and the package sets the mic
+up for you right away: the three services are started and switched on for every login, the launcher is in the app grid, the
+GNOME tile is enabled, and the KDE Connect buttons are added if GSConnect and a paired phone are there. Other users of the same
+computer get the same the next time they log in.
+
+Installing it also adds Phone Mic's own apt repository, so later versions arrive with the rest of your updates
+(`sudo apt update && sudo apt upgrade`); a running mic restarts by itself with the new version.
+
+**Log out and back in once** after the first install: GNOME only notices a newly installed tile at login
+(top-right menu → **Phone Mic**: shows Off / Waiting for phone / Streaming, click to toggle; a phone icon sits in the top bar while streaming).
+
+Installed earlier with `install.sh`? Just install the `.deb`. It takes over from the copy in your home folder and keeps your
+settings, the saved phone address and your autostart choice.
+
+### Other distros: `install.sh`
+
+```bash
 # Arch / Manjaro (untested):  sudo pacman -S android-tools android-udev scrcpy pipewire pipewire-pulse wireplumber libpulse git
 # Fedora (untested):          sudo dnf install android-tools pipewire-utils pulseaudio-utils git   + scrcpy from its install docs
 
-git clone https://github.com/sharjeelmazhar/phone-mic.git ~/Code/Mic-Setup
-cd ~/Code/Mic-Setup
+git clone https://github.com/sharjeelmazhar/phone-mic.git
+cd phone-mic
 ./install.sh
 ```
 
-`install.sh` copies two scripts to `~/.local/bin`, three user services to `~/.config/systemd/user`, a launcher to the app grid
-and, on GNOME, a small Quick Settings extension, then starts everything. No sudo, nothing system-wide. Re-run it any time; it is safe.
-Afterwards the cloned folder can be deleted: everything was copied into place. `phone-mic uninstall` removes all of it again.
-
-After the first install, **log out and back in once**: that puts `phone-mic` on your PATH and loads the GNOME tile
-(top-right menu → **Phone Mic**: shows Off / Waiting for phone / Streaming, click to toggle; a phone icon sits in the top bar while streaming).
+`install.sh` copies the scripts to `~/.local/bin`, the three user services to `~/.config/systemd/user`, a launcher to the app grid
+and, on GNOME, the Quick Settings extension, then starts everything. No sudo, nothing system-wide. Re-run it any time; it is safe.
+Afterwards the cloned folder can be deleted: everything was copied into place. Updating means `git pull` and `./install.sh` again.
+After the first install, log out and back in once: that puts `phone-mic` on your PATH and loads the GNOME tile.
 
 ## 2. Enable USB debugging (phone, one time)
 
@@ -146,9 +171,9 @@ into the KDE Connect tile of the quick-settings panel, next to Wi-Fi and Bluetoo
 <img src="docs/kdeconnect-control-centre.jpg" width="230" alt="Android quick-settings panel: KDE Connect tile showing Phone Mic OFF and ON buttons">
 </p>
 
-- `install.sh` does this automatically when GSConnect and a paired phone are present; otherwise it prints what to do and changes nothing.
+- The installation does this automatically when GSConnect and a paired phone are present; otherwise nothing is changed.
 - Set up GSConnect later? Run `phone-mic kdeconnect` any time. It is safe to repeat and keeps your other GSConnect commands.
-- `phone-mic kdeconnect remove` takes the three entries out again; `uninstall.sh` does that too.
+- `phone-mic kdeconnect remove` takes the three entries out again; uninstalling does that too.
 - KDE Plasma's own KDE Connect is not automated (untested here): add the three commands by hand in *System Settings → KDE Connect → Run commands*
   (`phone-mic kdeconnect` prints the exact lines).
 
@@ -174,10 +199,12 @@ phone-mic test       record 5 s, show level, play back
 phone-mic log        recent log lines
 phone-mic doctor     status + log — paste this when asking for help
 phone-mic kdeconnect [add|remove]   buttons in the phone's KDE Connect app (see above)
-phone-mic uninstall  remove everything (no need to keep the cloned folder)
+phone-mic setup      repeat the per-user setup (autostart, tile, KDE Connect buttons); the installation runs it for you
+phone-mic uninstall  remove everything, including the package (see Uninstall)
+phone-mic version    the installed version
 ```
 
-Config: `~/.config/phone-mic/config` (created from `config.example`). Options: `AUDIO_SOURCE` (`mic`, `mic-voice-communication`
+Config: `~/.config/phone-mic/config` (created from `config.example` at the first setup). Options: `AUDIO_SOURCE` (`mic`, `mic-voice-communication`
 for noise suppression, `mic-voice-recognition` for dictation), `AUDIO_BUFFER` (ms, raise to 150 if Wi-Fi crackles),
 `WIFI` (0/1), `PHONE_ADDR` (fixed ip:5555), `PHONE_SERIAL`, `AUTO_DEFAULT` (0/1, see *Laptops*). After editing: `phone-mic off && phone-mic on`.
 
@@ -185,6 +212,7 @@ for noise suppression, `mic-voice-recognition` for dictation), `AUDIO_BUFFER` (m
 
 | Symptom | Fix |
 |---|---|
+| `phone-mic status` ends with a `PROBLEM:` line | it names what is missing on the computer: scrcpy not installed or older than 2.1 (see Compatibility), or the audio server is not PipeWire |
 | `adb devices` empty with cable plugged in | charge-only cable or bad port: try another cable/port; check USB debugging is ON |
 | `unauthorized` in `phone-mic status` | unlock the phone and accept the prompt. No prompt? Developer options → *Revoke USB debugging authorisations*, replug |
 | Works on USB, not on Wi-Fi | phone rebooted or IP changed → plug USB once. Phone on a different network (guest Wi-Fi, mobile data)? Router isolates Wi-Fi from Ethernet ("AP isolation")? |
@@ -194,7 +222,7 @@ for noise suppression, `mic-voice-recognition` for dictation), `AUDIO_BUFFER` (m
 | Phone audio comes out of the speakers | must not happen (stream is pinned to the virtual mic and refuses to fall back). `phone-mic off && phone-mic on`, then `phone-mic doctor` |
 | Stream dies after minutes with screen off | phone battery saver killing adb: Settings → Battery → keep it off for now, or keep the phone charging |
 | Delay too high | it is ~50–100 ms; for lower use USB and `AUDIO_BUFFER=30` |
-| Anything else | `phone-mic doctor`; full output of a manual run: `phone-mic off; ~/.local/bin/phone-mic-stream` |
+| Anything else | `phone-mic doctor`; full output of a manual run: `phone-mic off; /usr/lib/phone-mic/phone-mic-stream` (`~/.local/bin/phone-mic-stream` after `install.sh`) |
 
 ## Tested
 
@@ -210,6 +238,9 @@ for noise suppression, `mic-voice-recognition` for dictation), `AUDIO_BUFFER` (m
 | Phone's Wi-Fi switched off while streaming | noticed within ~7 s → *Waiting for phone*; streaming again 9–16 s after Wi-Fi is back on |
 | `phone-mic off` / `on` | stops instantly / streaming again within ~3 s |
 | Phone Mic ON / OFF from the KDE Connect app on the phone (GSConnect) | works; also from the KDE Connect tile in Android's quick-settings panel |
+| `.deb` in a clean Ubuntu 26.04 VM: install, second user's first login, `apt upgrade` to a newer version from a signed repository, `phone-mic disable` across an upgrade, `apt remove` + reinstall, `phone-mic uninstall` | all as described; services restart on upgrade, settings kept on remove, nothing left after uninstall |
+| `.deb` over a copy installed by `install.sh` | home-folder copy removed, config and phone address kept, adb server not restarted |
+| `.deb` in a clean Ubuntu 24.04 VM | installs; `phone-mic status` reports the too-old/missing scrcpy; tile loads in GNOME 46 |
 | Not yet tested | computer suspend/resume; phone screen off for >10 min while streaming; switching between two phones |
 
 ## How it works
@@ -227,23 +258,58 @@ phone mic ─(adb over USB or Wi-Fi)─> scrcpy --audio-source=mic ─> phone_mi
 `LOG.md` records the setup session, including the dead ends (virtual sinks show up as output devices; the PulseAudio API
 cannot target a stream; streams do not re-link after a loopback restart) for anyone adapting this.
 
+### The package
+
+| Path in this repo | Installed as | What it is |
+|---|---|---|
+| `bin/phone-mic` | `/usr/bin/phone-mic` | the command |
+| `bin/phone-mic-stream`, `bin/phone-mic-gsconnect.js` | `/usr/lib/phone-mic/` | the service's script; the GSConnect helper |
+| `systemd/` | `/usr/lib/systemd/user/` | the three user services |
+| `gnome-extension/` | `/usr/share/gnome-shell/extensions/` | the Quick Settings tile |
+| `packaging/` | | install/remove scripts, the first-login setup unit, the apt source and its public key |
+| `build-deb.sh` | | packages all of the above into `dist/phone-mic_<version>_all.deb` (needs only `dpkg-deb`; there is nothing to compile) |
+| `build-apt-repo.sh` | | builds the signed apt repository that is published on GitHub Pages |
+
+The package is installed for the whole computer, the mic is per user. So the package's install script runs `phone-mic setup`
+for whoever is logged in at that moment (as that user, not as root), and `phone-mic-setup.service` does the same once for
+every other user at their next login. `setup` is what switches on autostart, enables the tile and adds the KDE Connect buttons.
+
+**Releasing a new version:** change `VERSION=` at the top of `bin/phone-mic`, commit, then push a tag with the same number:
+
+```bash
+git tag -m "Phone Mic 1.0.1" v1.0.1 && git push origin main v1.0.1
+```
+
+The workflow in `.github/workflows/release.yml` builds the `.deb`, attaches it to a GitHub release (also as `phone-mic.deb`, so
+the download link above never changes) and publishes it in the apt repository at `https://sharjeelmazhar.github.io/phone-mic`.
+Everyone who installed the `.deb` gets it with their next `sudo apt update && sudo apt upgrade`. The repository is signed with
+a key whose secret half is the `APT_SIGNING_KEY` secret of the GitHub repo; the public half is `packaging/phone-mic-archive-keyring.gpg`.
+
 ## Uninstall
 
-`phone-mic uninstall` (from anywhere; the cloned folder is not needed — `./uninstall.sh` in the folder does the same).
-It undoes everything the install and the scripts ever created or changed, so the system is back to how it was:
+`phone-mic uninstall` (from anywhere). It undoes everything the installation and the scripts ever created or changed, so the
+system is back to how it was. With the `.deb` it finishes by removing the package itself (`sudo apt-get purge phone-mic`, so it
+asks for your password); after `install.sh` it deletes the copied files (`./uninstall.sh` in the cloned folder does the same).
 
 | Removed | Where |
 |---|---|
-| the three commands `phone-mic`, `phone-mic-stream`, `phone-mic-gsconnect.js` | `~/.local/bin` |
-| the three services, their autostart links, the running processes | `~/.config/systemd/user` |
+| the commands `phone-mic`, `phone-mic-stream`, `phone-mic-gsconnect.js` | `/usr/bin`, `/usr/lib/phone-mic` (`.deb`) or `~/.local/bin` (`install.sh`) |
+| the three services, their autostart links, the running processes | `/usr/lib/systemd/user` or `~/.config/systemd/user` |
 | the virtual "Phone Mic" input device | PipeWire (gone immediately) |
-| the app-grid launcher | `~/.local/share/applications` |
-| the GNOME tile: extension files and its entry in GNOME's enabled-extensions list | `~/.local/share/gnome-shell/extensions`, gsettings |
+| the app-grid launcher | `/usr/share/applications` or `~/.local/share/applications` |
+| the GNOME tile: extension files and its entry in GNOME's enabled-extensions list | `/usr/share/gnome-shell/extensions` or `~/.local/share/gnome-shell/extensions`, gsettings |
 | the three Phone Mic entries in GSConnect's Run Command list (key reset to GSConnect's default if nothing else was ever added) | GSConnect settings |
 | config, saved phone address, saved previous input | `~/.config/phone-mic` |
 | Phone Mic as default input (if `phone-mic default` was used) | switched to the first real microphone |
-| adb-over-Wi-Fi mode on the phone (switched on by the install) | back to USB-only on every reachable phone; adb connections dropped |
+| adb-over-Wi-Fi mode on the phone (switched on by the setup) | back to USB-only on every reachable phone; adb connections dropped |
+| the apt source and its key (`.deb` only) | `/etc/apt/sources.list.d/phone-mic.sources`, `/usr/share/keyrings/phone-mic-archive-keyring.gpg` |
+
+`sudo apt remove phone-mic` is the gentler form: it does all of the above for the users who are logged in, but keeps
+`~/.config/phone-mic/config` and the apt source, so a later `sudo apt install phone-mic` brings everything back with your settings.
+`sudo apt purge phone-mic` removes those too, for every user of the computer. The packages apt installed alongside (adb, scrcpy, ...)
+stay until `sudo apt autoremove`.
 
 Not touched, because they are not this project's: adb's own key pair in `~/.android` (created by adb the first time it ran),
 the phone's Developer options / USB debugging (switch off by hand if you like, plus *Revoke USB debugging authorisations*),
-and old log lines in the system journal. Verified on the test machine by uninstalling and checking every item above.
+and old log lines in the system journal. Verified by uninstalling and checking every item above: the `install.sh` form on the
+test machine, the `.deb` form in a virtual machine.

@@ -190,3 +190,62 @@ Result ✔ — identical to the first full test, now with exact timings.
   GSConnect key unset, virtual mic 0, adb devices 0, phone port 5555 closed. Then reinstalled; config restored from a backup taken before
   the test. Because `adb usb` ran, Wi-Fi mode needs the one-time USB plug again.
 - Leftovers that are deliberately not ours to delete are listed in the README (adb key, phone Developer options, journal).
+
+## 2026-10-01 — Debian package and apt repository (Claude Code)
+
+**Goal:** install with one `.deb` and get later versions through `sudo apt update && sudo apt upgrade`, the same way as the
+Time Tracker app, instead of cloning the repo and running `install.sh`.
+
+**Design**
+- A `.deb` installs for the whole computer as root; the mic is per user (systemd *user* services, the tile in each user's
+  GNOME settings). So the files moved to system paths (`/usr/bin/phone-mic`, `/usr/lib/phone-mic/`, `/usr/lib/systemd/user/`,
+  `/usr/share/gnome-shell/extensions/`) and the per-user half of the old `install.sh` became `phone-mic setup`.
+  The package's `postinst` runs it for everyone who is logged in (`packaging/each-user`: `runuser` with a clean environment and
+  the user's `XDG_RUNTIME_DIR` / session bus), and `phone-mic-setup.service` (shipped enabled in `default.target.wants`,
+  skipped once `~/.config/phone-mic/setup-done` exists) runs it for other users at their next login.
+- Autostart stays a per-user `systemctl --user enable`, not a global one, so `phone-mic enable|disable` keep working as before.
+- `phone-mic setup` removes a copy installed earlier by `install.sh` (it would shadow the packaged units and tile), keeping
+  config, phone address and an earlier `phone-mic disable`. The adb server is left running during that.
+- Upgrade: `postinst` reloads the user managers and `try-restart`s the device and stream units, so a running mic continues
+  with the new scripts. `apt remove`: `prerm` undoes the per-user setup for logged-in users, config kept. `apt purge` /
+  `phone-mic uninstall`: also `~/.config/phone-mic` and the apt source.
+- `install.sh` stays for distros without apt; the repo files now carry the package's paths and `install.sh` rewrites them
+  to the home folder. `bin/phone-mic` works in both layouts (helpers next to it, or in `/usr/lib/phone-mic`).
+- apt repository: flat repository on GitHub Pages, built and signed in the release workflow on every `v*` tag; the `.deb`
+  ships `/etc/apt/sources.list.d/phone-mic.sources` and the public key. The workflow refuses a tag that does not match
+  `VERSION=` in `bin/phone-mic`.
+
+**Found on the way**
+- Only Ubuntu 26.04 ships a scrcpy that can capture the mic (3.3.4). 24.04, 25.04 and 25.10 all have 1.25 (checked on
+  Launchpad), so the README's "Ubuntu 24.04+" was wrong. scrcpy is therefore only *recommended* by the package: on older
+  releases it still installs, and `phone-mic status` / the service log print a `PROBLEM:` line until a newer scrcpy is there.
+  The service then looks again every 5 minutes instead of failing every 3 seconds.
+- `pipewire-pulse` and `wireplumber` had to become hard dependencies: as recommendations apt configured them *after*
+  phone-mic's own setup ran, so on a system without them the first start came too early.
+- The tile's `shell-version` list now covers 45–51. 46 and 50 were tried (below); 51 is listed unseen.
+
+**Tests** (QEMU VMs from the Ubuntu cloud images; no phone attached, so everything up to *Waiting for phone*)
+- 26.04: `apt install ./phone-mic.deb` on a clean system → dependencies pulled in, three services active and enabled for the
+  logged-in user, virtual mic present, state *waiting* ✔ · second user's first login → set up by `phone-mic-setup.service` ✔ ·
+  1.0.1 in a signed test repository → `apt update` verifies it with the shipped key, `apt upgrade` installs it, stream service
+  restarted (new PID) ✔ · `phone-mic disable` stays off across an upgrade and a repeated `phone-mic setup` ✔ ·
+  `apt remove` → services, autostart links, virtual mic and adb server gone, config kept; reinstall → back, config still there ✔ ·
+  `phone-mic uninstall` → package purged, nothing left for either user ✔.
+- 26.04, old `install.sh` (commit bb0514e) then the `.deb`: home-folder scripts, units and launcher gone, units now loaded from
+  `/usr/lib/systemd/user`, config + phone address kept, adb server PID unchanged ✔. Same with the new `install.sh` ✔;
+  `install.sh` with the package present refuses politely ✔; home-folder install + uninstall still clean ✔.
+- Tile: with a headless GNOME Shell running, `apt install` wrote the UUID into `enabled-extensions` through the package script;
+  after a shell restart the extension is loaded from `/usr/share/gnome-shell/extensions` and *ACTIVE* with no JS errors, on
+  GNOME 50 (26.04) and GNOME 46 (24.04). Not seen: the tile itself on 46 (headless shell has no screen).
+- 24.04: installs without scrcpy (recommendation not satisfiable), `PROBLEM: scrcpy is not installed…` in status and log ✔.
+- Not tested: streaming from a phone with the packaged version; the tile on screen on GNOME 46; Debian.
+
+### 14:05 UTC — first release, v1.0.0
+- Repo side set up once: `APT_SIGNING_KEY` secret, GitHub Pages with "GitHub Actions" as source, and the `github-pages`
+  environment allowed to deploy from `main` and from `v*` tags (by default only the default branch may deploy).
+- The first push of the tag (together with the new branch that introduced the workflow, during a GitHub incident) created
+  no workflow run at all. Pushing the same tag again started it. If a tag push ever shows nothing under Actions: delete the
+  tag on GitHub and push it again.
+- Checked against the published files in both VMs: `wget …/releases/latest/download/phone-mic.deb`, `sudo apt install ./phone-mic.deb`,
+  then `sudo apt update` fetches `InRelease` and `Packages` from `https://sharjeelmazhar.github.io/phone-mic` without warnings and
+  `apt policy phone-mic` lists that repository as the source ✔.

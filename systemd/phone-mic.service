@@ -4,7 +4,7 @@ After=phone-mic-device.service adb-server.service
 Wants=phone-mic-device.service adb-server.service
 
 [Service]
-ExecStart=%h/.local/bin/phone-mic-stream
+ExecStart=/usr/lib/phone-mic/phone-mic-stream
 Restart=always
 RestartSec=3
 

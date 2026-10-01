@@ -1,9 +1,49 @@
 #!/usr/bin/env bash
 # phone-mic — small control command for the phone-as-microphone setup.
-#   phone-mic on | off | toggle | enable | disable | state | status | log | test | default | doctor | kdeconnect [add|remove] | uninstall
+#   phone-mic on | off | toggle | enable | disable | state | status | log | test | default | doctor | kdeconnect [add|remove] | setup | uninstall | version
 
+VERSION=1.0.0
 UNITS="adb-server.service phone-mic-device.service phone-mic.service"
+UUID=phone-mic@sharjeelmazhar.github.io
+CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/phone-mic"
+DONE="$CONF_DIR/setup-done"       # written by `setup`: this user has been set up (so it is not repeated at every login)
+# Two layouts: the .deb (/usr/bin/phone-mic + helpers in /usr/lib/phone-mic) or install.sh (everything in ~/.local/bin).
+ME="$(readlink -f "$0")"; LIB="$(dirname "$ME")"; PACKAGED=0
+[ -f "$LIB/phone-mic-stream" ] || { LIB=/usr/lib/phone-mic; PACKAGED=1; }
 notify() { command -v notify-send >/dev/null && notify-send -i audio-input-microphone "Phone Mic" "$1"; echo "$1"; }
+
+# A copy put into the home folder by install.sh would shadow the packaged one (its units and its tile win over
+# the system ones). Take it away; config, saved phone address and the autostart choice are kept.
+drop_home_copy() {
+    [ -e ~/.local/bin/phone-mic ] || [ -e ~/.config/systemd/user/phone-mic.service ] || return 1
+    systemctl --user disable $UNITS >/dev/null 2>&1          # only the autostart links; what is running keeps running
+    rm -f ~/.config/systemd/user/adb-server.service ~/.config/systemd/user/phone-mic.service ~/.config/systemd/user/phone-mic-device.service
+    rm -f ~/.local/bin/phone-mic ~/.local/bin/phone-mic-stream ~/.local/bin/phone-mic-gsconnect.js
+    rm -f ~/.local/share/applications/phone-mic-toggle.desktop
+    rm -rf ~/.local/share/gnome-shell/extensions/$UUID
+    return 0
+}
+
+# Undo everything `setup` and the scripts created or changed for this user. The installed files are the caller's job.
+cleanup() {
+    "$ME" kdeconnect remove >/dev/null 2>&1                                  # GSConnect: our 3 entries (key reset if nothing else changed)
+    systemctl --user disable --now phone-mic.service phone-mic-device.service 2>/dev/null
+    # phone side: setup switched on adb-over-Wi-Fi (adb tcpip 5555); switch it back to USB-only on every reachable phone
+    for d in $(adb devices 2>/dev/null | awk 'NR>1 && $2=="device"{print $1}'); do timeout 5 adb -s "$d" usb >/dev/null 2>&1; done
+    timeout 5 adb disconnect >/dev/null 2>&1
+    systemctl --user disable --now adb-server.service 2>/dev/null
+    gnome-extensions disable $UUID 2>/dev/null
+    cur=$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null)                    # setup added the UUID here
+    if grep -q "'$UUID'" <<<"$cur"; then
+        new=$(python3 -c "import ast,sys; l=[x for x in ast.literal_eval(sys.argv[1]) if x!=sys.argv[2]]; print(repr(l) if l else '@as []')" "${cur#@as }" "$UUID")
+        gsettings set org.gnome.shell enabled-extensions "$new" 2>/dev/null
+    fi
+    if [ "$(pactl get-default-source 2>/dev/null)" = phone_mic ]; then       # `phone-mic default` had made Phone Mic the default input
+        real=$(pactl list short sources 2>/dev/null | awk '$2 !~ /\.monitor$/ && $2 != "phone_mic" {print $2; exit}')
+        [ -n "$real" ] && pactl set-default-source "$real" 2>/dev/null
+    fi
+    rm -f "$DONE" "$CONF_DIR/phone-addr" "$CONF_DIR/prev-default-input"
+}
 
 case "${1:-status}" in
     on)      systemctl --user start $UNITS && notify "ON — streaming starts as soon as the phone is reachable" ;;
@@ -25,7 +65,8 @@ case "${1:-status}" in
         for u in $UNITS; do printf "%-28s %s / autostart: %s\n" "$u" "$(systemctl --user is-active $u)" "$(systemctl --user is-enabled $u 2>/dev/null)"; done
         echo "adb devices:"; adb devices | sed 1d | sed 's/^/   /'
         echo "default input: $(pactl get-default-source)"
-        if pw-link -l 2>/dev/null | grep -q "phone_mic_in:input_"; then echo "stream: phone audio IS flowing into Phone Mic"; else echo "stream: not streaming"; fi ;;
+        if pw-link -l 2>/dev/null | grep -q "phone_mic_in:input_"; then echo "stream: phone audio IS flowing into Phone Mic"; else echo "stream: not streaming"; fi
+        "$LIB/phone-mic-stream" --check ;;
     test)
         f=$(mktemp --suffix=.wav); echo "Recording 5 seconds from Phone Mic — speak now..."
         timeout 5 parecord -d phone_mic --file-format=wav "$f"
@@ -37,48 +78,77 @@ p = max(abs(x) for x in d); print("peak level: %d / 32767  ->  %s" % (p, "OK, so
 EOF
         echo "Playing it back..."; paplay "$f"; rm -f "$f" ;;
     doctor)
-        "$0" status; echo "--- last log lines:"; "$0" log 15 ;;
+        echo "phone-mic $VERSION ($ME)"; "$0" status; echo "--- last log lines:"; "$0" log 15 ;;
     kdeconnect)   # put "Phone Mic ON / OFF / TOGGLE" into the KDE Connect app on the phone (via GSConnect's Run Command)
-        what="${2:-add}"; me="$(readlink -f "$0")"
-        if command -v gjs >/dev/null && [ -f "$(dirname "$me")/phone-mic-gsconnect.js" ]; then
-            gjs -m "$(dirname "$me")/phone-mic-gsconnect.js" "$what" "$me"; rc=$?
+        what="${2:-add}"
+        if command -v gjs >/dev/null && [ -f "$LIB/phone-mic-gsconnect.js" ]; then
+            gjs -m "$LIB/phone-mic-gsconnect.js" "$what" "$ME"; rc=$?
         else rc=2; fi
         if [ "$rc" = 2 ]; then cat <<EOF
 No GSConnect found, so nothing was changed. To control the mic from the phone later:
   GNOME:      install the GSConnect extension, pair the phone, then run:  phone-mic kdeconnect
   KDE Plasma: System Settings -> KDE Connect -> your phone -> Run commands -> add:
-                Phone Mic ON      $me on
-                Phone Mic OFF     $me off
-                Phone Mic TOGGLE  $me toggle
+                Phone Mic ON      $ME on
+                Phone Mic OFF     $ME off
+                Phone Mic TOGGLE  $ME toggle
 The commands then appear in the KDE Connect app on the phone under "Run Command".
 EOF
         fi
         exit $rc ;;
-    uninstall)   # undo everything install.sh and the scripts ever created or changed; works without the source folder
-        UUID=phone-mic@sharjeelmazhar.github.io
-        "$0" kdeconnect remove >/dev/null 2>&1                                   # GSConnect: our 3 entries (key reset if nothing else changed)
-        systemctl --user disable --now phone-mic.service phone-mic-device.service 2>/dev/null
-        # phone side: install switched on adb-over-Wi-Fi (adb tcpip 5555); switch it back to USB-only on every reachable phone
-        for d in $(adb devices 2>/dev/null | awk 'NR>1 && $2=="device"{print $1}'); do timeout 5 adb -s "$d" usb >/dev/null 2>&1; done
-        timeout 5 adb disconnect >/dev/null 2>&1
-        systemctl --user disable --now adb-server.service 2>/dev/null
+    setup)   # the per-user half of an installation: autostart, start now, GNOME tile, KDE Connect buttons. Safe to repeat.
+             # --auto (package install/upgrade and phone-mic-setup.service at login): only if this user is not set up yet.
+        uid=$(id -u); { [ "$uid" -ge 1000 ] && [ "$uid" -lt 60000 ]; } || exit 0        # people only: not root, not the login screen's user
+        systemctl --user show-environment >/dev/null 2>&1 || { echo "phone-mic: no systemd user session for $(id -un); run 'phone-mic setup' after logging in."; exit 1; }
+        auto=1; moved=0; before=0
+        { [ -f "$DONE" ] || { [ "$PACKAGED" = 1 ] && [ -e ~/.config/systemd/user/phone-mic.service ]; }; } && before=1
+        # set up before and autostart is off: that was `phone-mic disable`, keep it
+        [ $before = 1 ] && [ "$(systemctl --user is-enabled phone-mic.service 2>/dev/null)" = disabled ] && auto=0
+        [ "$PACKAGED" = 1 ] && drop_home_copy && moved=1
+        [ "${2:-}" = --auto ] && [ -f "$DONE" ] && [ $moved = 0 ] && exit 0
+        mkdir -p "$CONF_DIR"
+        [ -f "$CONF_DIR/config" ] || [ ! -f /usr/share/phone-mic/config.example ] || install -m 644 /usr/share/phone-mic/config.example "$CONF_DIR/config"
+        systemctl --user daemon-reload
+        systemctl --user enable -q adb-server.service phone-mic-device.service
+        # An adb server started by hand earlier would keep the port and leave adb-server.service failing: let the unit own it.
+        systemctl --user is-active -q adb-server.service || { adb kill-server >/dev/null 2>&1; systemctl --user start adb-server.service; }
+        systemctl --user restart phone-mic-device.service
+        if [ $auto = 1 ]; then systemctl --user enable -q phone-mic.service; systemctl --user restart phone-mic.service
+        else systemctl --user try-restart phone-mic.service; fi
+        # Optional GNOME Quick Settings tile (only if GNOME Shell is present)
+        tile=""
+        if command -v gnome-shell >/dev/null; then
+            # `gnome-extensions enable` only works once the shell has loaded the extension (at login). Writing the
+            # setting directly makes it enabled at the next login too, so no visit to Extension Manager is needed.
+            cur=$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null || echo "@as []")
+            if ! grep -q "'$UUID'" <<<"$cur"; then
+                if [ "$cur" = "@as []" ] || [ "$cur" = "[]" ]; then new="['$UUID']"; else new="${cur%]}, '$UUID']"; fi
+                gsettings set org.gnome.shell enabled-extensions "$new" 2>/dev/null
+            fi
+            # still "not there" for the running shell: it only looks for new extensions when it starts
+            gnome-extensions enable $UUID 2>/dev/null && [ $moved = 0 ] || tile=" Log out and back in once to see the Phone Mic tile in Quick Settings."
+        fi
+        # Optional: "Phone Mic ON/OFF/TOGGLE" buttons in the KDE Connect app on the phone (needs GSConnect + a paired phone).
+        # Harmless if GSConnect is missing; can be run any time later with:  phone-mic kdeconnect
+        "$ME" kdeconnect add >/dev/null 2>&1
+        echo "$VERSION" > "$DONE"
+        echo "phone-mic: set up for $(id -un). Check with: phone-mic status.$tile"
+        "$LIB/phone-mic-stream" --check ;;
+    uninstall)   # undo everything the installation and the scripts ever created or changed
+        if [ "${2:-}" = --from-package ]; then cleanup; exit 0; fi      # apt is removing the package: this user's part, config kept
+        cleanup
+        rm -rf "$CONF_DIR"                                                       # config, saved phone address, saved previous input
+        echo "Removed: services, launcher, GNOME tile, KDE Connect buttons, $CONF_DIR, virtual mic; adb on the phone back to USB-only."
+        echo "Not touched (not ours): adb's own key in ~/.android, the phone's Developer options, old lines in the system journal."
+        if [ "$PACKAGED" = 1 ]; then
+            echo "Now the package itself and its apt source (asks for your password):  sudo apt-get purge phone-mic"
+            exec sudo apt-get purge -y phone-mic
+        fi
         rm -f ~/.config/systemd/user/adb-server.service ~/.config/systemd/user/phone-mic.service ~/.config/systemd/user/phone-mic-device.service
         systemctl --user daemon-reload
-        gnome-extensions disable $UUID 2>/dev/null; rm -rf ~/.local/share/gnome-shell/extensions/$UUID
-        cur=$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null)                    # install added the UUID here
-        if grep -q "'$UUID'" <<<"$cur"; then
-            new=$(python3 -c "import ast,sys; l=[x for x in ast.literal_eval(sys.argv[1]) if x!=sys.argv[2]]; print(repr(l) if l else '@as []')" "${cur#@as }" "$UUID")
-            gsettings set org.gnome.shell enabled-extensions "$new" 2>/dev/null
-        fi
+        rm -rf ~/.local/share/gnome-shell/extensions/$UUID
         rm -f ~/.local/share/applications/phone-mic-toggle.desktop
-        rm -rf ~/.config/phone-mic                                                 # config, saved phone address, saved previous input
-        if [ "$(pactl get-default-source 2>/dev/null)" = phone_mic ]; then       # `phone-mic default` had made Phone Mic the default input
-            real=$(pactl list short sources 2>/dev/null | awk '$2 !~ /\.monitor$/ && $2 != "phone_mic" {print $2; exit}')
-            [ -n "$real" ] && pactl set-default-source "$real" 2>/dev/null
-        fi
         rm -f ~/.local/bin/phone-mic-stream ~/.local/bin/phone-mic-gsconnect.js
-        echo "Removed: services, commands, launcher, GNOME tile, KDE Connect buttons, ~/.config/phone-mic, virtual mic; adb on the phone back to USB-only."
-        echo "Not touched (not ours): adb's own key in ~/.android, the phone's Developer options, old lines in the system journal."
         rm -f ~/.local/bin/phone-mic ;;
-    *) echo "usage: phone-mic on|off|toggle|enable|disable|state|status|log|test|default|doctor|kdeconnect [add|remove]|uninstall"; exit 2 ;;
+    version) echo "phone-mic $VERSION" ;;
+    *) echo "usage: phone-mic on|off|toggle|enable|disable|state|status|log|test|default|doctor|kdeconnect [add|remove]|setup|uninstall|version"; exit 2 ;;
 esac

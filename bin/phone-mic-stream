@@ -7,6 +7,23 @@
 
 set -u
 
+# What keeps the mic from ever working on this computer. `phone-mic-stream --check` prints it (used by
+# `phone-mic status` and `phone-mic setup`); the service logs the scrcpy part instead of failing every 3 s.
+problems() {
+    local v
+    if ! command -v scrcpy >/dev/null; then
+        echo "PROBLEM: scrcpy is not installed. Ubuntu 26.04 and newer: sudo apt install scrcpy   Older releases: https://github.com/Genymobile/scrcpy/blob/master/doc/linux.md"
+    else
+        v=$(scrcpy --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+        [ -z "$v" ] || [ "$(printf '%s\n2.1\n' "$v" | sort -V | head -1)" = 2.1 ] ||
+            echo "PROBLEM: scrcpy $v is too old, microphone capture needs 2.1 or newer (Ubuntu before 26.04 ships 1.25): https://github.com/Genymobile/scrcpy/blob/master/doc/linux.md"
+    fi
+    [ "${1:-}" = scrcpy ] && return
+    pactl info 2>/dev/null | grep -q "PulseAudio (on PipeWire" ||
+        echo "PROBLEM: the audio server does not look like PipeWire; the virtual microphone needs PipeWire with pipewire-pulse and WirePlumber."
+}
+if [ "${1:-}" = --check ]; then problems; exit 0; fi
+
 CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/phone-mic"
 CONF="$CONF_DIR/config"
 STATE="$CONF_DIR/phone-addr"      # last known Wi-Fi address of the phone, written automatically
@@ -77,6 +94,9 @@ find_device() {
     timeout 3 adb disconnect "$addr" >/dev/null 2>&1   # drop stale/offline entry
     return 1
 }
+
+p=$(problems scrcpy)
+if [ -n "$p" ]; then log "$p"; sleep 300; exit 1; fi      # nothing to retry quickly: look again in 5 minutes
 
 # Never start without the loopback target: otherwise the mic could end up on the speakers.
 until pw-link -i 2>/dev/null | grep -q "^$TARGET:"; do

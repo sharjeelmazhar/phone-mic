@@ -1,0 +1,6 @@
+#!/bin/sh
+# Before the files go away (not on upgrade): stop the mic and undo the per-user setup for whoever is logged in.
+set -e
+[ "$1" = remove ] || exit 0
+/usr/lib/phone-mic/each-user /usr/bin/phone-mic uninstall --from-package
+exit 0

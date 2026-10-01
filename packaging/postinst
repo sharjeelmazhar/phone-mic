@@ -1,0 +1,10 @@
+#!/bin/sh
+# After install and after every upgrade. The mic is per user (systemd user services, GNOME tile), so set it
+# up right away for whoever is logged in; phone-mic-setup.service does the same for other users at their login.
+set -e
+[ "$1" = configure ] || exit 0
+/usr/lib/phone-mic/each-user systemctl --user daemon-reload
+/usr/lib/phone-mic/each-user /usr/bin/phone-mic setup --auto
+# an upgrade ($2 = the version that was installed): running services pick up the new scripts
+[ -z "$2" ] || /usr/lib/phone-mic/each-user systemctl --user try-restart phone-mic-device.service phone-mic.service
+exit 0

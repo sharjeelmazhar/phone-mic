@@ -1,0 +1,5 @@
+# Updates for Phone Mic, so that "sudo apt upgrade" brings new versions.
+Types: deb
+URIs: https://sharjeelmazhar.github.io/phone-mic
+Suites: ./
+Signed-By: /usr/share/keyrings/phone-mic-archive-keyring.gpg
