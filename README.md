@@ -277,7 +277,7 @@ every other user at their next login. `setup` is what switches on autostart, ena
 **Releasing a new version:** change `VERSION=` at the top of `bin/phone-mic`, commit, then push a tag with the same number:
 
 ```bash
-git tag v1.0.1 && git push origin main v1.0.1
+git tag -m "Phone Mic 1.0.1" v1.0.1 && git push origin main v1.0.1
 ```
 
 The workflow in `.github/workflows/release.yml` builds the `.deb`, attaches it to a GitHub release (also as `phone-mic.deb`, so
