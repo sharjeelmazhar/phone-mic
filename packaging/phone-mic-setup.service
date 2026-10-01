@@ -1,0 +1,10 @@
+[Unit]
+Description=Phone Mic — first-time setup for this user (autostart, GNOME tile)
+# The package is installed for the whole computer, the mic is per user. `apt install` sets it up for whoever is
+# logged in at that moment; this covers everyone else, once, at their next login.
+ConditionPathExists=!%E/phone-mic/setup-done
+ConditionUser=!@system
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/phone-mic setup --auto

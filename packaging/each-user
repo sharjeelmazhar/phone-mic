@@ -1,0 +1,15 @@
+#!/bin/sh
+# each-user COMMAND... — run COMMAND as every person who is logged in right now (for the package's
+# install/remove scripts, which run as root while the mic lives in each user's own session).
+for bus in /run/user/*/bus; do
+    [ -S "$bus" ] || continue
+    uid=${bus#/run/user/}; uid=${uid%/bus}
+    { [ "$uid" -ge 1000 ] && [ "$uid" -lt 60000 ]; } 2>/dev/null || continue      # people only
+    user=$(id -nu "$uid" 2>/dev/null) || continue
+    home=$(getent passwd "$uid" | cut -d: -f6)
+    # a clean environment: root's HOME and the like must not leak into the user's commands
+    (cd / && runuser -u "$user" -- env -i HOME="$home" USER="$user" LOGNAME="$user" LANG=C.UTF-8 \
+        PATH=/usr/local/bin:/usr/bin:/bin XDG_RUNTIME_DIR="/run/user/$uid" \
+        DBUS_SESSION_BUS_ADDRESS="unix:path=$bus" "$@") || true
+done
+exit 0

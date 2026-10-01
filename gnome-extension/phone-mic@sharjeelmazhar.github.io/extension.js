@@ -9,7 +9,9 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {QuickToggle, SystemIndicator} from 'resource:///org/gnome/shell/ui/quickSettings.js';
 
-const PHONE_MIC = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'phone-mic']);
+// /usr/bin when installed from the .deb, ~/.local/bin when installed by install.sh
+const PHONE_MIC = ['/usr/bin/phone-mic', GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'phone-mic'])]
+    .find(path => GLib.file_test(path, GLib.FileTest.IS_EXECUTABLE)) ?? '/usr/bin/phone-mic';
 const POLL_SECONDS = 3;
 
 // Run `phone-mic <args>` without blocking the shell; resolves to trimmed stdout ('' on any error).

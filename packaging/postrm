@@ -1,0 +1,16 @@
+#!/bin/sh
+# apt remove keeps each user's settings; apt purge (and `phone-mic uninstall`) removes them too.
+set -e
+if [ "$1" = remove ] || [ "$1" = purge ]; then
+    /usr/lib/phone-mic/each-user systemctl --user daemon-reload 2>/dev/null || true
+fi
+[ "$1" = purge ] || exit 0
+getent passwd | while IFS=: read -r _ _ uid _ _ home _; do
+    { [ "$uid" -ge 1000 ] && [ "$uid" -lt 60000 ] && [ -d "$home/.config" ]; } || continue
+    rm -rf "$home/.config/phone-mic"
+    for unit in adb-server phone-mic-device phone-mic; do         # autostart links that now point nowhere
+        link="$home/.config/systemd/user/default.target.wants/$unit.service"
+        if [ -L "$link" ] && [ ! -e "$link" ]; then rm -f "$link"; fi
+    done
+done
+exit 0
