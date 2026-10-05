@@ -25,3 +25,11 @@
 # (e.g. a laptop's built-in mic) when the phone goes away. 0 = never touch the default input (choose it
 # yourself in Settings → Sound → Input or with `phone-mic default`; the choice is remembered).
 #AUTO_DEFAULT=0
+
+# 1 = while the phone is streaming, Phone Mic stays the default input no matter what: plugging in a headset
+# or picking another mic in Settings is undone within a few seconds. 0 = leave the choice to you.
+#KEEP_DEFAULT=0
+
+# 1 = if GSConnect has lost the phone, ask it to connect to the phone's IP directly. Needed when the router
+# does not pass discovery broadcasts between its 2.4 GHz / 5 GHz Wi-Fi and the cable (phone switched bands).
+#GSCONNECT_NUDGE=1

@@ -2,7 +2,7 @@
 # phone-mic — small control command for the phone-as-microphone setup.
 #   phone-mic on | off | toggle | enable | disable | state | status | log | test | default | doctor | kdeconnect [add|remove] | setup | uninstall | version
 
-VERSION=1.0.0
+VERSION=1.0.1
 UNITS="adb-server.service phone-mic-device.service phone-mic.service"
 UUID=phone-mic@sharjeelmazhar.github.io
 CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/phone-mic"

@@ -1,5 +1,22 @@
 # Setup log
 
+## 2026-10-05 — v1.0.1: works on either Wi-Fi band, Phone Mic stays the default input (Claude Code)
+
+**Problem:** the router (PTCL ZTE F1611A) has the 2.4 GHz network as SSID1 and 5 GHz as SSID5. When the phone
+switched to 5 GHz it kept its IP (192.168.1.6), but GSConnect lost it and Phone Mic sat on "Waiting for phone".
+After plugging in a 3.5 mm headset and rebooting, Settings showed no Phone Mic input although the tile said Streaming.
+
+**Findings:** unicast to the phone works from either band (ping, adb on 5555 and GSConnect on 1716 all answer).
+GSConnect finds devices by UDP *broadcast*, which the router does not pass between SSID5 and the LAN ports.
+Phone Mic uses unicast adb, so it notices the dead link and reconnects by itself.
+
+**Changes**
+- `phone-mic-stream`: `GSCONNECT_NUDGE=1` (default): when there is no GSConnect link to the phone, call GSConnect's
+  `connect` action with `lan://<phone ip>:1716` (unicast identity), while waiting and every 15 s while streaming.
+- `phone-mic-stream`: `KEEP_DEFAULT=1` (opt-in): while streaming, put Phone Mic back as default input when anything else takes it.
+- `phone-mic-device.service`: `priority.session/driver=3000` on `phone_mic`, so WirePlumber prefers it over built-in/jack mics
+  when no choice is stored or the stored one is missing.
+
 ## 2026-09-18 — initial setup (Claude Code)
 
 **Goal:** use Redmi Note 11 (model 2201117TG, HyperOS 1.0.8.0, Android 13) as microphone for desktop MDPT
