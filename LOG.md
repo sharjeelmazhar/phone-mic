@@ -1,5 +1,11 @@
 # Setup log
 
+## 2026-10-06 — v2.1.4: Quick Settings tile on the phone (Claude Code)
+
+A "Phone Mic" tile for the phone's Quick Settings: tap to switch on or off without opening the app, subtitle Off / Waiting /
+Streaming, long press opens the app. Switching on goes through the invisible LaunchActivity, because Android gives the
+microphone only to a service started from the foreground. Tested in the emulator (on, off, on).
+
 ## 2026-10-06 — v2.1.3: new app icon (Claude Code)
 
 A glass microphone (translucent body, bright rim, a sheen across the top and a glowing core) with sound going out on both

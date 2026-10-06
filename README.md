@@ -17,7 +17,7 @@ built-in mic is poor: Phone Mic is simply one more input to choose, and the buil
   headphones and other mics stay as they were. Nothing runs as root on the computer.
 - **Updates with the system.** On Ubuntu / Debian it is a `.deb` with its own apt repository: `sudo apt update && sudo apt upgrade`
   brings new versions.
-- **One click to cut the mic** for privacy: a tile in GNOME's Quick Settings menu (or `phone-mic off`), or *Turn off* on the phone.
+- **One click to cut the mic** for privacy: a tile in GNOME's Quick Settings menu (or `phone-mic off`), or *Turn off* on the phone; the phone has its own *Phone Mic* tile in its Quick Settings too (add it with the pencil / Edit button).
 
 <p align="center"><img src="docs/quick-settings-tile.png" width="340" alt="GNOME Quick Settings menu with the Phone Mic tile showing Streaming, and a phone icon in the top bar"></p>
 

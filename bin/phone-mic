@@ -3,7 +3,7 @@
 #   phone-mic on | off | toggle | enable | disable | state | status | pair | phones | forget <phone> | app | log | test
 #             | default | doctor | kdeconnect [add|remove] | setup | uninstall | version
 
-VERSION=2.1.3
+VERSION=2.1.4
 UNITS="phone-mic-device.service phone-mic.service"
 UUID=phone-mic@sharjeelmazhar.github.io
 CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/phone-mic"

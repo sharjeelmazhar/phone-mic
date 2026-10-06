@@ -170,6 +170,7 @@ class MicService : Service() {
         wakeLock = getSystemService(PowerManager::class.java)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PhoneMic:stream").apply { setReferenceCounted(false) }
         scheduleWatchdog(this)
+        MicTile.refresh(this)
         thread(name = "server", isDaemon = true) { serve() }
         thread(name = "announce", isDaemon = true) { announce() }
     }
@@ -195,6 +196,7 @@ class MicService : Service() {
         wifiLock?.release(); wakeLock?.release()
         streamingTo = null
         synchronized(announceWake) { announceWake.notifyAll() }
+        MicTile.refresh(this)
         super.onDestroy()
     }
 
@@ -420,6 +422,7 @@ class MicService : Service() {
     }
 
     private fun updateStatus() {
+        MicTile.refresh(this)
         if (running) getSystemService(NotificationManager::class.java).notify(NOTE_STATUS, statusNote())
     }
 

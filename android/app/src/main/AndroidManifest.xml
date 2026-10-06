@@ -20,6 +20,8 @@
         android:theme="@style/Theme.PhoneMic">
         <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize">
+            <!-- long press on the Quick Settings tile opens the app -->
+            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" /></intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -36,6 +38,11 @@
             android:excludeFromRecents="true" android:noHistory="true" android:taskAffinity="" android:launchMode="singleInstance" />
         <service android:name=".MicService" android:exported="false" android:foregroundServiceType="microphone"
             android:stopWithTask="false" />
+        <service android:name=".MicTile" android:exported="true" android:label="Phone Mic" android:icon="@drawable/ic_mic"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
+            <meta-data android:name="android.service.quicksettings.ACTIVE_TILE" android:value="false" />
+        </service>
         <receiver android:name=".BootReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
