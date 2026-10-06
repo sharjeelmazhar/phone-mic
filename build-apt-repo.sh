@@ -9,6 +9,8 @@ cd "$(dirname "$(readlink -f "$0")")"
 rm -rf site
 mkdir site
 cp dist/phone-mic_*_all.deb site/
+# the phone app, at a link that never changes (shown by `phone-mic app` and in the README)
+cp PhoneMic.apk site/
 cd site
 
 dpkg-scanpackages --multiversion . > Packages 2>/dev/null
@@ -37,4 +39,5 @@ cat > index.html <<'HTML'
 <p>This is the apt repository of <a href="https://github.com/sharjeelmazhar/phone-mic">Phone Mic</a>.
 Install it from its <a href="https://github.com/sharjeelmazhar/phone-mic/releases/latest">latest release</a>;
 that adds this repository so that updates arrive with <code>sudo apt upgrade</code>.</p>
+<p>The phone app: <a href="PhoneMic.apk">PhoneMic.apk</a>.</p>
 HTML

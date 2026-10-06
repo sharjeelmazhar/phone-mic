@@ -1,5 +1,5 @@
 // Phone Mic — Quick Settings tile for the phone-mic scripts.
-// Shows Off / Waiting for phone / Streaming, click toggles `phone-mic on|off`.
+// Shows Off / Waiting for phone / Pairing code / Streaming, click toggles `phone-mic on|off`.
 // A small phone icon appears in the top bar while the phone mic is streaming.
 
 import Gio from 'gi://Gio';
@@ -65,13 +65,14 @@ class PhoneMicToggle extends QuickToggle {
         await this.refresh();
     }
 
-    // Returns the state string: streaming | waiting | off | ''
+    // Returns the state word: streaming | waiting | pairing | off | ''
     async refresh() {
         if (this._busy)
             return null;
-        const state = await phoneMic('state');
-        this.checked = state === 'streaming' || state === 'waiting';
-        this.subtitle = SUBTITLES[state] ?? state;
+        const [state, code] = (await phoneMic('state')).split(' ');
+        this.checked = ['streaming', 'waiting', 'pairing'].includes(state);
+        // pairing: the same code is shown on the phone, the person taps Allow there if they match
+        this.subtitle = state === 'pairing' ? `Code ${code}: allow on phone` : SUBTITLES[state] ?? state;
         return state;
     }
 });

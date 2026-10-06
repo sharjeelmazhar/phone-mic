@@ -1,25 +1,25 @@
-# ~/.config/phone-mic/config — settings for phone-mic-stream. After editing:  phone-mic off && phone-mic on
+# ~/.config/phone-mic/config — settings for phone-mic-daemon. After editing:  phone-mic off && phone-mic on
 
 # Which phone microphone mode to use:
-#   mic                       normal (default)
-#   mic-voice-communication   phone applies echo-cancel/noise suppression, good for calls
-#   mic-voice-recognition     tuned for dictation / speech-to-text
-#   mic-unprocessed           raw
+#   mic                   normal (default)
+#   voice-communication   phone applies echo-cancel/noise suppression, good for calls
+#   voice-recognition     tuned for dictation / speech-to-text
+#   unprocessed           raw
+#   camcorder             tuned for video recording
 #AUDIO_SOURCE="mic"
 
-# Milliseconds of buffering. Raise to 100-200 if audio crackles over Wi-Fi.
-#AUDIO_BUFFER=50
+# Most milliseconds of audio held back to ride out Wi-Fi hiccups. Raise to 200-300 if the sound drops out,
+# lower (down to 40) for less delay on a good network.
+#BUFFER_MS=120
 
-# 1 = use the phone over Wi-Fi when no USB cable is attached, 0 = USB only
-#WIFI=1
+# Fixed phone IP address. Normally NOT needed: the phone announces itself, its last address is remembered,
+# and the local network is searched when it is not found otherwise.
+#PHONE_ADDR="192.168.1.50"
 
-# Fixed phone address. Normally NOT needed: it is learned automatically each time the phone is on USB
-# and stored in ~/.config/phone-mic/phone-addr
-#PHONE_ADDR="192.168.1.50:5555"
-
-# Only use the phone with this USB serial number (from `adb devices`). Useful if other Android devices
-# get plugged into this computer. Empty = use whichever device is found.
-#PHONE_SERIAL="abc1234"
+# 1 = when the phone is not found otherwise, try every address of the local network (about one second, every
+# 10 seconds while waiting). Needed when the router does not pass the phone's announcements between its
+# 2.4 GHz / 5 GHz Wi-Fi and the cable. 0 = never.
+#SCAN=1
 
 # 1 = only while the phone is streaming, make Phone Mic the default input and restore the previous input
 # (e.g. a laptop's built-in mic) when the phone goes away. 0 = never touch the default input (choose it
@@ -29,7 +29,3 @@
 # 1 = while the phone is streaming, Phone Mic stays the default input no matter what: plugging in a headset
 # or picking another mic in Settings is undone within a few seconds. 0 = leave the choice to you.
 #KEEP_DEFAULT=0
-
-# 1 = if GSConnect has lost the phone, ask it to connect to the phone's IP directly. Needed when the router
-# does not pass discovery broadcasts between its 2.4 GHz / 5 GHz Wi-Fi and the cable (phone switched bands).
-#GSCONNECT_NUDGE=1

@@ -1,0 +1,642 @@
+#!/usr/bin/python3 -I
+"""phone-mic-daemon — run by phone-mic.service (systemd user unit).
+
+Finds the Phone Mic app on the phone over the local network, pairs with it once (the person compares a 6-digit
+code and taps Allow on the phone), then plays the phone's microphone into the loopback input stream "phone_mic_in".
+Apps see it as the input device "Phone Mic". Never gives up: when the phone goes away (other Wi-Fi, out of range,
+switched off) it keeps looking every few seconds and reconnects by itself.
+
+The protocol is described in android/app/src/main/java/io/github/sharjeelmazhar/phonemic/Proto.kt.
+Python standard library only.
+"""
+import errno
+import fcntl
+import hashlib
+import hmac
+import json
+import os
+import re
+import secrets
+import select
+import signal
+import socket
+import subprocess
+import sys
+import threading
+import time
+
+PROTO = 1
+RATE = 48000
+# the environment overrides are for tests/test_daemon.py only, which runs next to a real installation
+TCP_PORT = int(os.environ.get("PHONE_MIC_TCP_PORT", 47630))
+UDP_PORT = int(os.environ.get("PHONE_MIC_UDP_PORT", 47631))
+TARGET = os.environ.get("PHONE_MIC_TARGET", "phone_mic_in")      # input side of the pw-loopback from phone-mic-device.service
+STREAM = os.environ.get("PHONE_MIC_STREAM", "phone_mic_stream")  # node name of our playback stream
+SOURCE = os.environ.get("PHONE_MIC_SOURCE", "phone_mic")         # the "Phone Mic" device (for the default-input options)
+MODP2048 = int(
+    "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DD"
+    "EF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7ED"
+    "EE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F"
+    "83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3B"
+    "E39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA0510"
+    "15728E5A8AACAA68FFFFFFFFFFFFFFFF", 16)
+
+CONF_DIR = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "phone-mic")
+RUN_DIR = os.environ.get("PHONE_MIC_RUN_DIR") or os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "phone-mic")
+PHONES = os.path.join(CONF_DIR, "phones.json")      # this computer's id + the paired phones (with their keys)
+STATE = os.path.join(RUN_DIR, "state")               # read by `phone-mic state` / the GNOME tile
+PAIR_REQUEST = os.path.join(RUN_DIR, "pair")         # written by `phone-mic pair`: pairing with a new phone allowed
+
+CONFIG = {                        # defaults; override in ~/.config/phone-mic/config
+    "AUDIO_SOURCE": "mic",        # mic | voice-communication | voice-recognition | unprocessed | camcorder
+    "BUFFER_MS": "120",           # most audio held back; more = fewer drop-outs on bad Wi-Fi, less = lower delay
+    "PHONE_ADDR": "",             # optional fixed IP of the phone; normally found automatically
+    "SCAN": "1",                  # 1 = also try every address of the local network when the phone is not found otherwise
+    "AUTO_DEFAULT": "0",          # 1 = Phone Mic is the default input only while streaming
+    "KEEP_DEFAULT": "0",          # 1 = while streaming, keep Phone Mic as default input no matter what
+}
+
+
+def log(*a):
+    print("[phone-mic]", *a, flush=True)
+
+
+def load_config():
+    path = os.path.join(CONF_DIR, "config")
+    try:
+        lines = open(path).read().splitlines()
+    except OSError:
+        return
+    for line in lines:            # shell-style KEY=value / KEY="value"; comments and other lines ignored
+        m = re.match(r'\s*([A-Z_]+)=(?:"([^"]*)"|\'([^\']*)\'|([^\s#]*))', line)
+        if m and m.group(1) in CONFIG:
+            CONFIG[m.group(1)] = next(g for g in m.groups()[1:] if g is not None)
+    CONFIG["AUDIO_SOURCE"] = CONFIG["AUDIO_SOURCE"].removeprefix("mic-")     # version 1 spelled them mic-voice-...
+
+
+# ---- protocol helpers (must match Proto.kt) ----------------------------------------------------------------------
+
+def mac(key, msg):
+    return hmac.new(key, msg if isinstance(msg, bytes) else msg.encode(), hashlib.sha256).digest()
+
+
+def encode_name(s):
+    out = "".join(chr(b) if (chr(b).isalnum() and b < 128) or chr(b) in "-_." else "%%%02X" % b for b in s.encode())
+    return out or "-"
+
+
+def decode_name(s):
+    out, i = bytearray(), 0
+    while i < len(s):
+        if s[i] == "%" and i + 2 < len(s) + 0 and re.fullmatch(r"[0-9A-Fa-f]{2}", s[i + 1:i + 3]):
+            out.append(int(s[i + 1:i + 3], 16)); i += 3
+        else:
+            out += s[i].encode(); i += 1
+    return out.decode("utf-8", "replace")[:64]
+
+
+class Dh:
+    def __init__(self):
+        self.x = secrets.randbits(256) | (1 << 255)
+        self.public = format(pow(2, self.x, MODP2048), "x")
+
+    def shared(self, other_hex):
+        y = int(other_hex, 16)
+        if not 1 < y < MODP2048 - 1:
+            raise ValueError("bad public value")
+        return hashlib.sha256(pow(y, self.x, MODP2048).to_bytes(256, "big")).digest()
+
+
+def pair_key(shared, np_, nc):
+    return mac(shared, f"K|{np_}|{nc}")
+
+
+def pair_code(key):
+    return "%06d" % (int.from_bytes(mac(key, "code")[:4], "big") % 1_000_000)
+
+
+def proof(key, role, np_, nc):
+    return mac(key, f"{role}|{np_}|{nc}").hex()
+
+
+def session_key(key, np_, nc):
+    return mac(key, f"S|{np_}|{nc}")
+
+
+class Cipher:
+    """Byte n of the stream is XORed with byte n%32 of HMAC(key, n//32 as 8-byte big-endian)."""
+    def __init__(self, key):
+        self.base = hmac.new(key, digestmod=hashlib.sha256)
+        self.block = 0
+        self.ks = b""
+
+    def apply(self, data):
+        need = len(data) - len(self.ks)
+        parts = [self.ks]
+        while need > 0:
+            h = self.base.copy(); h.update(self.block.to_bytes(8, "big")); self.block += 1
+            parts.append(h.digest()); need -= 32
+        ks = b"".join(parts)
+        self.ks = ks[len(data):]
+        n = len(data)
+        return (int.from_bytes(data, "big") ^ int.from_bytes(ks[:n], "big")).to_bytes(n, "big")
+
+
+# ---- state ------------------------------------------------------------------------------------------------------
+
+def write_state(*words):
+    os.makedirs(RUN_DIR, exist_ok=True)
+    tmp = STATE + ".tmp"
+    with open(tmp, "w") as f:
+        f.write(" ".join(words) + "\n")
+    os.replace(tmp, STATE)
+
+
+def notify(text, urgent=False):
+    try:
+        subprocess.Popen(["notify-send", "-i", "audio-input-microphone", "-a", "Phone Mic"]
+                         + (["-u", "critical"] if urgent else []) + ["Phone Mic", text],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        pass
+
+
+class Phones:
+    def __init__(self):
+        try:
+            self.d = json.load(open(PHONES))
+        except (OSError, ValueError):
+            self.d = {}
+        self.d.setdefault("phones", {})
+        if "computer_id" not in self.d:
+            self.d["computer_id"] = secrets.token_hex(8)
+            self.save()
+
+    def reload(self):
+        self.__init__()
+
+    def save(self):
+        os.makedirs(CONF_DIR, exist_ok=True)
+        tmp = PHONES + ".tmp"
+        with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as f:
+            json.dump(self.d, f, indent=1)
+        os.replace(tmp, PHONES)
+
+    @property
+    def cid(self):
+        return self.d["computer_id"]
+
+    @property
+    def all(self):
+        return self.d["phones"]
+
+
+def pairing_allowed(phones):
+    """A phone may be paired when none is paired yet, or for 5 minutes after `phone-mic pair`. Not otherwise, not even
+    a phone that was paired before: anything on the network can claim to be that phone."""
+    if not phones.all:
+        return True
+    try:
+        return time.time() - os.stat(PAIR_REQUEST).st_mtime < 300
+    except OSError:
+        return False
+
+
+# ---- finding the phone ------------------------------------------------------------------------------------------
+
+announced = {}                     # phone id -> (ip, port, name, time) from the phone's UDP broadcasts
+announced_lock = threading.Lock()
+
+
+def listen_announcements():
+    while True:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.bind(("", UDP_PORT))
+            while True:
+                data, (ip, _) = s.recvfrom(512)
+                t = data.decode("ascii", "replace").split()
+                if len(t) >= 5 and t[0] == "PHONEMIC" and t[1] == str(PROTO) and t[3].isdigit():
+                    with announced_lock:
+                        announced[t[2]] = (ip, int(t[3]), decode_name(t[4]), time.time())
+        except OSError as e:
+            log(f"cannot listen for phone announcements on UDP {UDP_PORT}: {e}; retrying in 30 s")
+            time.sleep(30)
+
+
+SKIP_IFACES = ("lo", "docker", "br-", "virbr", "veth", "tun", "tap", "wg", "tailscale", "zt", "vboxnet", "vmnet")
+
+
+def local_networks():
+    """(own ip, prefix) of the computer's LAN interfaces. VPN/container interfaces are not scanned."""
+    try:
+        out = subprocess.run(["ip", "-4", "-o", "addr", "show", "up"], capture_output=True, text=True, timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    nets = []
+    for line in out.splitlines():
+        f = line.split()
+        if len(f) >= 4 and not f[1].startswith(SKIP_IFACES) and "/" in f[3]:
+            ip, prefix = f[3].split("/")
+            nets.append((ip, int(prefix)))
+    return nets
+
+
+def scan_hosts():
+    """Every address of the local /24 (or smaller) networks with TCP_PORT open. About one second."""
+    targets, own = [], set()
+    for ip, prefix in local_networks():
+        own.add(ip)
+        prefix = max(prefix, 24)    # bigger networks: only the /24 around this computer
+        base = int.from_bytes(socket.inet_aton(ip), "big") & ~((1 << (32 - prefix)) - 1)
+        targets += [socket.inet_ntoa((base + i).to_bytes(4, "big")) for i in range(1, (1 << (32 - prefix)) - 1)]
+    targets = [t for t in dict.fromkeys(targets) if t not in own]
+    pending, found = {}, []
+    for t in targets:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setblocking(False)
+        try:
+            s.connect_ex((t, TCP_PORT))
+            pending[s] = t
+        except OSError:
+            s.close()
+    end = time.time() + 1.2
+    while pending and time.time() < end:
+        _, w, _ = select.select([], list(pending), [], max(0, end - time.time()))
+        for s in w:
+            if s.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR) == 0:
+                found.append(pending[s])
+            s.close(); del pending[s]
+    for s in pending:
+        s.close()
+    return found
+
+
+def gsconnect_peers():
+    """Addresses GSConnect / KDE Connect is talking to: very likely the phone."""
+    try:
+        out = subprocess.run(["ss", "-tnH", "state", "established", "( dport = :1716 or sport = :1716 )"],
+                             capture_output=True, text=True, timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    peers = []
+    for line in out.splitlines():
+        f = line.split()
+        if len(f) >= 4:
+            peers.append(f[-1].rsplit(":", 1)[0].strip("[]").removeprefix("::ffff:"))
+    return peers
+
+
+def candidates(phones, scan):
+    """Addresses to try, most likely first."""
+    now = time.time()
+    first, later = [], []
+    if CONFIG["PHONE_ADDR"]:
+        first.append(CONFIG["PHONE_ADDR"].split(":")[0])
+    with announced_lock:
+        for pid, (ip, _, _, t) in announced.items():
+            if now - t < 15:
+                (first if pid in phones.all else later).append(ip)
+    first += [p["ip"] for p in phones.all.values() if p.get("ip")]
+    first += gsconnect_peers()
+    if scan and CONFIG["SCAN"] == "1":
+        later += scan_hosts()
+    return list(dict.fromkeys(first + later))
+
+
+# ---- PipeWire ---------------------------------------------------------------------------------------------------
+
+def pw_links():
+    try:
+        return subprocess.run(["pw-link", "-l"], capture_output=True, text=True, timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def target_exists():
+    try:
+        out = subprocess.run(["pw-link", "-i"], capture_output=True, text=True, timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return any(l.startswith(TARGET + ":") for l in out.splitlines())
+
+
+def link_state():
+    """(linked to TARGET, linked to anything else) for our stream's output ports."""
+    ours = linked = bad = False
+    for line in pw_links().splitlines():
+        if not line.startswith(" "):
+            ours = line.startswith(STREAM + ":output_")
+        elif ours and "|->" in line:
+            if line.split("|->", 1)[1].strip().startswith(TARGET + ":"):
+                linked = True
+            else:
+                bad = True
+    return linked, bad
+
+
+def pactl(*args):
+    try:
+        return subprocess.run(["pactl", *args], capture_output=True, text=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+PREV_DEFAULT = os.path.join(CONF_DIR, "prev-default-input")
+
+
+def take_default():
+    if CONFIG["AUTO_DEFAULT"] != "1":
+        return
+    cur = pactl("get-default-source")
+    if cur and cur != SOURCE:
+        open(PREV_DEFAULT, "w").write(cur + "\n")
+    pactl("set-default-source", SOURCE)
+    log("default input -> Phone Mic")
+
+
+def keep_default():
+    if CONFIG["KEEP_DEFAULT"] == "1" and pactl("get-default-source") != SOURCE:
+        pactl("set-default-source", SOURCE)
+        log("default input was changed; put back to Phone Mic")
+
+
+def restore_default():
+    if CONFIG["AUTO_DEFAULT"] != "1" or not os.path.exists(PREV_DEFAULT):
+        return
+    prev = open(PREV_DEFAULT).read().strip()
+    os.remove(PREV_DEFAULT)
+    if prev and pactl("get-default-source") == SOURCE:   # the person picked something else meanwhile: leave it
+        pactl("set-default-source", prev)
+        log(f"default input restored -> {prev}")
+
+
+# ---- a connection to the phone ----------------------------------------------------------------------------------
+
+class Gone(Exception):
+    pass
+
+
+class Conn:
+    def __init__(self, ip, timeout=3.0):
+        self.ip = ip
+        self.s = socket.create_connection((ip, TCP_PORT), timeout=timeout)
+        self.s.settimeout(10)
+        self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self.buf = b""
+
+    def line(self, timeout=10):
+        self.s.settimeout(timeout)
+        while b"\n" not in self.buf:
+            if len(self.buf) > 4096:
+                raise Gone("line too long")
+            try:
+                d = self.s.recv(4096)
+            except socket.timeout:
+                raise Gone("no answer")
+            if not d:
+                raise Gone("connection closed")
+            self.buf += d
+        line, self.buf = self.buf.split(b"\n", 1)
+        return line.decode("ascii", "replace").strip().split()
+
+    def send(self, text):
+        self.s.sendall((text + "\n").encode())
+
+    def close(self):
+        try:
+            self.s.close()
+        except OSError:
+            pass
+
+
+stop_now = threading.Event()
+denied_until = {}                  # phone id -> time; after a "Deny" on the phone, do not ask again at once
+
+
+def try_phone(ip, phones):
+    """Connect to ip. Returns 'streamed' (ran until the stream ended), 'paired', or None (not a usable phone)."""
+    try:
+        c = Conn(ip)
+    except OSError:
+        return None
+    try:
+        t = c.line(5)
+        if len(t) < 5 or t[0] != "PHONEMIC":
+            return None
+        if t[1] != str(PROTO):
+            log(f"{ip}: Phone Mic app speaks protocol {t[1]}, this computer {PROTO}: update the app or this computer")
+            write_state("waiting", "update")
+            return None
+        pid, app_version, pname = t[2], t[3], decode_name(t[4])
+        known = phones.all.get(pid)
+        if denied_until.get(pid, 0) > time.time() or (known is None and not pairing_allowed(phones)):
+            return None
+        nc = secrets.token_hex(16)
+        c.send(f"HELLO {phones.cid} {encode_name(socket.gethostname())} {nc} {CONFIG['AUDIO_SOURCE']}")
+        r = c.line()
+        if r and r[0] == "AUTH" and len(r) >= 2:
+            if known is None:
+                log(f"{pname} ({ip}) remembers this computer but this computer lost the pairing: "
+                    f"on the phone, open Phone Mic and tap Forget next to {socket.gethostname()}")
+                denied_until[pid] = time.time() + 60
+                return None
+            key = bytes.fromhex(known["key"])
+            np_ = r[1]
+            c.send("PROOF " + proof(key, "C", np_, nc))
+            r = c.line()
+            if r[:1] == ["DENIED"]:
+                log(f"{pname} ({ip}) did not accept this computer's key (another phone using its id?); trying again in a minute")
+                denied_until[pid] = time.time() + 60
+                return None
+            if len(r) < 4 or r[0] != "OK" or not hmac.compare_digest(r[3], proof(key, "P", np_, nc)):
+                log(f"{ip}: the phone could not prove it is {known['name']}; ignoring it")
+                return None
+            if known.get("ip") != ip or known.get("name") != pname:
+                known["ip"], known["name"] = ip, pname; phones.save()
+            stream(c, pname, Cipher(session_key(key, np_, nc)), app_version)
+            return "streamed"
+        if r and r[0] == "PAIR" and len(r) >= 3:
+            if not pairing_allowed(phones):
+                # a paired phone that lost the pairing (app data cleared, reinstalled), or something posing as it
+                log(f"{pname} ({ip}) asks to be paired again; allow it with: phone-mic pair")
+                if known:
+                    notify(f"{pname} lost its pairing with this computer. To pair again run: phone-mic pair")
+                denied_until[pid] = time.time() + 120
+                return None
+            np_ = r[1]
+            dh = Dh()
+            c.send("PAIRKEY " + dh.public)
+            key = pair_key(dh.shared(r[2]), np_, nc)
+            code = pair_code(key)
+            log(f"pairing with {pname} ({ip}): check that the phone shows code {code} and tap Allow there")
+            write_state("pairing", code, encode_name(pname))
+            notify(f"Pairing with {pname}. On the phone, check the code {code} and tap Allow.", urgent=True)
+            r = c.line(130)
+            if r[:1] == ["PAIRED"]:
+                phones.all[pid] = {"name": pname, "key": key.hex(), "ip": ip, "paired": int(time.time())}
+                phones.save()
+                try:
+                    os.remove(PAIR_REQUEST)
+                except OSError:
+                    pass
+                log(f"paired with {pname}")
+                notify(f"Paired with {pname}.")
+                return "paired"
+            log(f"{pname} did not allow pairing")
+            denied_until[pid] = time.time() + 600
+            write_state("waiting")
+            return None
+        if r[:1] == ["DENIED"]:
+            denied_until[pid] = time.time() + 600
+        return None
+    except (Gone, OSError, ValueError, IndexError) as e:
+        log(f"{ip}: {e}")
+        return None
+    finally:
+        c.close()
+        if not stop_now.is_set():
+            write_state("waiting")
+
+
+def start_player():
+    """pw-cat reading raw 16-bit mono PCM from a small pipe and playing it into TARGET only."""
+    props = ("{ node.name=%s node.description=\"Phone Mic stream\" node.dont-move=true node.dont-fallback=true "
+             "node.dont-reconnect=false media.role=Communication }" % STREAM)
+    p = subprocess.Popen(["pw-cat", "--playback", "--raw", "--target", TARGET, "--rate", str(RATE), "--channels", "1",
+                          "--channel-map", "MONO", "--format", "s16", "--latency", "20ms", "-P", props, "-"],
+                         stdin=subprocess.PIPE, stdout=subprocess.DEVNULL)
+    fd = p.stdin.fileno()
+    want = max(4096, int(CONFIG["BUFFER_MS"]) * RATE * 2 // 1000)
+    try:
+        fcntl.fcntl(fd, 1031, want)            # F_SETPIPE_SZ: the pipe is the jitter buffer; small = low delay
+    except OSError:
+        pass
+    os.set_blocking(fd, False)
+    return p
+
+
+def stream(c, pname, cipher, app_version):
+    log(f"streaming from {pname} ({c.ip}, app {app_version}, source={CONFIG['AUDIO_SOURCE']}) -> {TARGET}")
+    write_state("streaming", encode_name(pname))
+    player = start_player()
+    fd = player.stdin.fileno()
+    c.s.settimeout(0.5)
+    pending = c.buf; c.buf = b""
+    started = last_data = last_keepalive = last_check = time.time()
+    taken = False
+    dropped = 0
+    try:
+        while not stop_now.is_set():
+            now = time.time()
+            if now - last_keepalive >= 1:
+                c.s.sendall(b"\n"); last_keepalive = now
+            try:
+                d = c.s.recv(8192)
+                if not d:
+                    log(f"{pname} closed the connection"); break
+                last_data = now
+                pending += cipher.apply(d)
+            except socket.timeout:
+                if now - last_data > 4:
+                    log(f"no audio from {pname} for 4 s (other Wi-Fi, out of range, app stopped?); looking for it again")
+                    break
+            # whole samples only, at most PIPE_BUF per write (atomic): what does not fit is dropped, never half-written
+            while len(pending) >= 2:
+                n = min(len(pending) & ~1, 4096)
+                try:
+                    os.write(fd, pending[:n])
+                except BlockingIOError:
+                    dropped += n
+                except BrokenPipeError:
+                    log("pw-cat stopped"); return
+                pending = pending[n:]
+            if player.poll() is not None:
+                log(f"pw-cat ended (exit {player.returncode})"); return
+            if now - last_check >= 1:
+                last_check = now
+                linked, bad = link_state()
+                if bad:
+                    log(f"SAFETY STOP: the stream was linked to something other than {TARGET}"); return
+                if linked and not taken:
+                    take_default(); taken = True
+                elif taken:
+                    keep_default()
+                if not linked and now - started > 8:
+                    log(f"stream is not linked to {TARGET} (PipeWire restarted?); reconnecting"); return
+    except OSError as e:
+        log(f"{pname}: {e}")
+    finally:
+        if dropped:
+            log(f"dropped {dropped * 1000 // (RATE * 2)} ms of late audio")
+        try:
+            player.stdin.close()
+        except OSError:
+            pass
+        player.terminate()
+        try:
+            player.wait(3)
+        except subprocess.TimeoutExpired:
+            player.kill()
+        restore_default()
+
+
+# ---- main -------------------------------------------------------------------------------------------------------
+
+def main():
+    load_config()
+    phones = Phones()
+    def on_term(*_):
+        stop_now.set()
+        raise SystemExit(0)
+    signal.signal(signal.SIGTERM, on_term)
+    signal.signal(signal.SIGINT, on_term)
+    write_state("waiting")
+    threading.Thread(target=listen_announcements, daemon=True).start()
+
+    # never play anything before the loopback target exists: otherwise the mic could end up on the speakers
+    while not target_exists():
+        log(f"waiting for {TARGET} (phone-mic-device.service)")
+        time.sleep(3)
+
+    announced_wait = False
+    last_scan = 0
+    while True:
+        phones.reload()
+        scan = time.time() - last_scan >= 10
+        if scan:
+            last_scan = time.time()
+        result = None
+        for ip in candidates(phones, scan):
+            result = try_phone(ip, phones)
+            if result:
+                break
+        if result == "paired":
+            continue                       # connect right away with the new key
+        if result == "streamed":
+            announced_wait = False
+            time.sleep(1)
+            continue
+        if not announced_wait:
+            if phones.all:
+                names = ", ".join(p["name"] for p in phones.all.values())
+                log(f"waiting for {names} (open Phone Mic on the phone; same network as this computer)")
+            else:
+                log("no phone paired yet: install the Phone Mic app on the phone and switch it on; it is found automatically")
+            announced_wait = True
+        # wake up early when a phone announces itself
+        for _ in range(10):
+            time.sleep(0.5)
+            with announced_lock:
+                if any(time.time() - t < 1 for (_, _, _, t) in announced.values()):
+                    break
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--selftest-vectors":
+        k = pair_key(bytes([1] * 32), "aa", "bb")
+        print(f"key={k.hex()} code={pair_code(k)} proofC={proof(k, 'C', 'n1', 'n2')} "
+              f"ks={Cipher(session_key(k, 'n1', 'n2')).apply(bytes(40)).hex()}")
+        sys.exit(0)
+    main()

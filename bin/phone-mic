@@ -1,37 +1,70 @@
 #!/usr/bin/env bash
 # phone-mic — small control command for the phone-as-microphone setup.
-#   phone-mic on | off | toggle | enable | disable | state | status | log | test | default | doctor | kdeconnect [add|remove] | setup | uninstall | version
+#   phone-mic on | off | toggle | enable | disable | state | status | pair | phones | forget <phone> | app | log | test
+#             | default | doctor | kdeconnect [add|remove] | setup | uninstall | version
 
-VERSION=1.0.1
-UNITS="adb-server.service phone-mic-device.service phone-mic.service"
+VERSION=2.0.0
+UNITS="phone-mic-device.service phone-mic.service"
 UUID=phone-mic@sharjeelmazhar.github.io
 CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/phone-mic"
 DONE="$CONF_DIR/setup-done"       # written by `setup`: this user has been set up (so it is not repeated at every login)
+RUN_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/phone-mic"     # state file and pairing request of phone-mic-daemon
+APP_URL=https://sharjeelmazhar.github.io/phone-mic/PhoneMic.apk
 # Two layouts: the .deb (/usr/bin/phone-mic + helpers in /usr/lib/phone-mic) or install.sh (everything in ~/.local/bin).
 ME="$(readlink -f "$0")"; LIB="$(dirname "$ME")"; PACKAGED=0
-[ -f "$LIB/phone-mic-stream" ] || { LIB=/usr/lib/phone-mic; PACKAGED=1; }
+[ -f "$LIB/phone-mic-daemon" ] || { LIB=/usr/lib/phone-mic; PACKAGED=1; }
 notify() { command -v notify-send >/dev/null && notify-send -i audio-input-microphone "Phone Mic" "$1"; echo "$1"; }
 
 # A copy put into the home folder by install.sh would shadow the packaged one (its units and its tile win over
-# the system ones). Take it away; config, saved phone address and the autostart choice are kept.
+# the system ones). Take it away; config, paired phones and the autostart choice are kept.
 drop_home_copy() {
     [ -e ~/.local/bin/phone-mic ] || [ -e ~/.config/systemd/user/phone-mic.service ] || return 1
     systemctl --user disable $UNITS >/dev/null 2>&1          # only the autostart links; what is running keeps running
     rm -f ~/.config/systemd/user/adb-server.service ~/.config/systemd/user/phone-mic.service ~/.config/systemd/user/phone-mic-device.service
-    rm -f ~/.local/bin/phone-mic ~/.local/bin/phone-mic-stream ~/.local/bin/phone-mic-gsconnect.js
+    rm -f ~/.local/bin/phone-mic ~/.local/bin/phone-mic-daemon ~/.local/bin/phone-mic-stream ~/.local/bin/phone-mic-gsconnect.js
     rm -f ~/.local/share/applications/phone-mic-toggle.desktop
     rm -rf ~/.local/share/gnome-shell/extensions/$UUID
     return 0
+}
+
+# Version 1 streamed with scrcpy over adb and ran its own adb server (adb-server.service). That unit is gone:
+# stop it, remove its autostart link and the phone address file. adb itself and the phone's settings are left alone.
+drop_v1() {
+    systemctl --user stop adb-server.service 2>/dev/null
+    rm -f ~/.config/systemd/user/default.target.wants/adb-server.service ~/.config/systemd/user/adb-server.service "$CONF_DIR/phone-addr"
+}
+
+# What keeps the mic from ever working on this computer (printed by `status` and `setup`)
+problems() {
+    command -v pw-cat >/dev/null || echo "PROBLEM: pw-cat is missing (package pipewire-bin)."
+    pactl info 2>/dev/null | grep -q "PulseAudio (on PipeWire" ||
+        echo "PROBLEM: the audio server does not look like PipeWire; the virtual microphone needs PipeWire with pipewire-pulse and WirePlumber."
+}
+
+# The daemon's state: off | waiting | pairing <code> <phone> | streaming <phone>   (phone names are %-encoded)
+state_line() {
+    case "$(systemctl --user show phone-mic.service -p ActiveState --value 2>/dev/null)" in
+        active|activating|reloading) ;;     # "activating" = about to be restarted (3 s gap after a failure): not "off"
+        *) echo off; return ;;
+    esac
+    local s; s=$(cat "$RUN_DIR/state" 2>/dev/null); echo "${s:-waiting}"
+}
+decode() { python3 -c 'import sys, urllib.parse; print(urllib.parse.unquote(sys.argv[1]))' "$1"; }
+paired() { grep -q '"key"' "$CONF_DIR/phones.json" 2>/dev/null; }
+
+app_help() {
+    echo "The phone needs the Phone Mic app (no developer options, no cable). Open this link on the phone:"
+    echo "  $APP_URL"
+    if command -v qrencode >/dev/null; then qrencode -t ANSIUTF8 -m 1 "$APP_URL"; else echo "  (with the qrencode package installed, a QR code to scan is shown here)"; fi
+    echo "Install and open it, allow the microphone, then check that the phone and this computer show the same"
+    echo "6-digit code and tap Allow on the phone. Same Wi-Fi / network as this computer is all it needs."
 }
 
 # Undo everything `setup` and the scripts created or changed for this user. The installed files are the caller's job.
 cleanup() {
     "$ME" kdeconnect remove >/dev/null 2>&1                                  # GSConnect: our 3 entries (key reset if nothing else changed)
     systemctl --user disable --now phone-mic.service phone-mic-device.service 2>/dev/null
-    # phone side: setup switched on adb-over-Wi-Fi (adb tcpip 5555); switch it back to USB-only on every reachable phone
-    for d in $(adb devices 2>/dev/null | awk 'NR>1 && $2=="device"{print $1}'); do timeout 5 adb -s "$d" usb >/dev/null 2>&1; done
-    timeout 5 adb disconnect >/dev/null 2>&1
-    systemctl --user disable --now adb-server.service 2>/dev/null
+    drop_v1
     gnome-extensions disable $UUID 2>/dev/null
     cur=$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null)                    # setup added the UUID here
     if grep -q "'$UUID'" <<<"$cur"; then
@@ -42,40 +75,82 @@ cleanup() {
         real=$(pactl list short sources 2>/dev/null | awk '$2 !~ /\.monitor$/ && $2 != "phone_mic" {print $2; exit}')
         [ -n "$real" ] && pactl set-default-source "$real" 2>/dev/null
     fi
-    rm -f "$DONE" "$CONF_DIR/phone-addr" "$CONF_DIR/prev-default-input"
+    rm -f "$DONE" "$CONF_DIR/prev-default-input"; rm -rf "$RUN_DIR"
 }
 
 case "${1:-status}" in
     on)      systemctl --user start $UNITS && notify "ON — streaming starts as soon as the phone is reachable" ;;
-    off)     systemctl --user stop phone-mic.service && timeout 5 adb disconnect >/dev/null 2>&1   # also drop Wi-Fi links (clean switch to another phone)
+    off)     systemctl --user stop phone-mic.service
              notify "OFF — phone microphone released (until 'phone-mic on' or next login)" ;;
     enable)  systemctl --user enable --now $UNITS >/dev/null 2>&1 && echo "autostart ON: phone mic connects automatically at every login" ;;
     disable) systemctl --user disable --now phone-mic.service >/dev/null 2>&1 && echo "autostart OFF and stopped: use 'phone-mic on' when you want it, 'phone-mic enable' to make it automatic again" ;;
     toggle)  if systemctl --user is-active -q phone-mic.service; then "$0" off; else "$0" on; fi ;;
-    state)   # one word for scripts / the GNOME tile: off | waiting | streaming
-        # "activating" = systemd is about to restart the script (3 s gap after a reconnect): that is not "off".
-        case "$(systemctl --user show phone-mic.service -p ActiveState --value 2>/dev/null)" in
-            active|activating|reloading) ;;
-            *) echo off; exit 0 ;;
-        esac
-        if pw-link -l 2>/dev/null | grep -q "phone_mic_in:input_"; then echo streaming; else echo waiting; fi ;;
+    state)   # for scripts / the GNOME tile: off | waiting | pairing <code> | streaming
+        set -- $(state_line)
+        if [ "$1" = pairing ]; then echo "pairing $2"; else echo "$1"; fi ;;
+    pair)    # allow pairing with one more phone for 5 minutes (the first phone is paired without this)
+        mkdir -p "$RUN_DIR"; touch "$RUN_DIR/pair"
+        systemctl --user is-active -q phone-mic.service || systemctl --user start $UNITS
+        echo "For the next 5 minutes a new phone with the Phone Mic app switched on can be paired. Waiting for it..."
+        for _ in $(seq 150); do
+            set -- $(state_line)
+            if [ "$1" = pairing ]; then echo "Code $2 for $(decode "$3"): tap Allow on the phone if it shows the same code."; break; fi
+            [ -e "$RUN_DIR/pair" ] || break
+            sleep 2
+        done ;;
+    phones)  python3 -I - "$CONF_DIR/phones.json" <<'PY'
+import json, sys, time
+try: d = json.load(open(sys.argv[1]))
+except (OSError, ValueError): d = {}
+p = d.get("phones", {})
+if not p: print("no phone paired yet"); sys.exit(0)
+for pid, x in p.items():
+    print(f"{x['name']:30} last address {x.get('ip') or '-':15}  paired {time.strftime('%Y-%m-%d', time.localtime(x.get('paired', 0)))}  (id {pid})")
+PY
+        ;;
+    forget)  # forget a paired phone (by name or id), or all of them
+        [ -n "${2:-}" ] || { echo "usage: phone-mic forget <phone name or id> | all"; exit 2; }
+        python3 -I - "$CONF_DIR/phones.json" "$2" <<'PY' || exit 1
+import json, os, sys
+f, what = sys.argv[1], sys.argv[2]
+try: d = json.load(open(f))
+except (OSError, ValueError): print("no phone paired"); sys.exit(1)
+p = d.get("phones", {})
+gone = [k for k, x in p.items() if what in ("all", k) or x["name"].lower() == what.lower()]
+if not gone: print(f"no paired phone called {what} (see: phone-mic phones)"); sys.exit(1)
+for k in gone: print(f"forgot {p.pop(k)['name']}")
+tmp = f + ".tmp"
+with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as out: json.dump(d, out, indent=1)
+os.replace(tmp, f)
+PY
+        systemctl --user try-restart phone-mic.service
+        echo "In the Phone Mic app on the phone, also tap Forget next to this computer." ;;
+    app)     app_help ;;
     default) pactl set-default-source phone_mic && echo "Phone Mic is now the default input device" ;;
     log)     journalctl --user -u phone-mic.service -u phone-mic-device.service -n "${2:-40}" --no-pager ;;
     status)
         for u in $UNITS; do printf "%-28s %s / autostart: %s\n" "$u" "$(systemctl --user is-active $u)" "$(systemctl --user is-enabled $u 2>/dev/null)"; done
-        echo "adb devices:"; adb devices | sed 1d | sed 's/^/   /'
+        set -- $(state_line)
+        case "$1" in
+            off)       echo "state: off" ;;
+            waiting)   echo "state: on, waiting for the phone (Phone Mic app switched on, same network)" ;;
+            pairing)   echo "state: PAIRING with $(decode "$3"): tap Allow on the phone if it shows the code $2" ;;
+            streaming) echo "state: streaming from $(decode "$2")" ;;
+            *)         echo "state: $*" ;;
+        esac
+        echo "paired phones:"; "$ME" phones | sed 's/^/   /'
         echo "default input: $(pactl get-default-source)"
-        if pw-link -l 2>/dev/null | grep -q "phone_mic_in:input_"; then echo "stream: phone audio IS flowing into Phone Mic"; else echo "stream: not streaming"; fi
-        "$LIB/phone-mic-stream" --check ;;
+        paired || echo "No phone paired yet: run 'phone-mic app' to see how to get the app."
+        problems ;;
     test)
         f=$(mktemp --suffix=.wav); echo "Recording 5 seconds from Phone Mic — speak now..."
         timeout 5 parecord -d phone_mic --file-format=wav "$f"
-        python3 - "$f" <<'EOF'
+        python3 -I - "$f" <<'PY'
 import sys, wave, struct
 w = wave.open(sys.argv[1]); n = w.getnframes() * w.getnchannels()
 d = struct.unpack('<%dh' % n, w.readframes(w.getnframes())) if n else [0]
 p = max(abs(x) for x in d); print("peak level: %d / 32767  ->  %s" % (p, "OK, sound received" if p > 500 else "SILENT (phone not streaming?)"))
-EOF
+PY
         echo "Playing it back..."; paplay "$f"; rm -f "$f" ;;
     doctor)
         echo "phone-mic $VERSION ($ME)"; "$0" status; echo "--- last log lines:"; "$0" log 15 ;;
@@ -104,13 +179,13 @@ EOF
         # set up before and autostart is off: that was `phone-mic disable`, keep it
         [ $before = 1 ] && [ "$(systemctl --user is-enabled phone-mic.service 2>/dev/null)" = disabled ] && auto=0
         [ "$PACKAGED" = 1 ] && drop_home_copy && moved=1
-        [ "${2:-}" = --auto ] && [ -f "$DONE" ] && [ $moved = 0 ] && exit 0
+        # set up by version 1 (adb + scrcpy): redo the setup once for the app-based version
+        [ "${2:-}" = --auto ] && [ -f "$DONE" ] && [ "$(cut -d. -f1 "$DONE")" -ge 2 ] 2>/dev/null && [ $moved = 0 ] && exit 0
         mkdir -p "$CONF_DIR"
         [ -f "$CONF_DIR/config" ] || [ ! -f /usr/share/phone-mic/config.example ] || install -m 644 /usr/share/phone-mic/config.example "$CONF_DIR/config"
+        drop_v1
         systemctl --user daemon-reload
-        systemctl --user enable -q adb-server.service phone-mic-device.service
-        # An adb server started by hand earlier would keep the port and leave adb-server.service failing: let the unit own it.
-        systemctl --user is-active -q adb-server.service || { adb kill-server >/dev/null 2>&1; systemctl --user start adb-server.service; }
+        systemctl --user enable -q phone-mic-device.service
         systemctl --user restart phone-mic-device.service
         if [ $auto = 1 ]; then systemctl --user enable -q phone-mic.service; systemctl --user restart phone-mic.service
         else systemctl --user try-restart phone-mic.service; fi
@@ -132,23 +207,28 @@ EOF
         "$ME" kdeconnect add >/dev/null 2>&1
         echo "$VERSION" > "$DONE"
         echo "phone-mic: set up for $(id -un). Check with: phone-mic status.$tile"
-        "$LIB/phone-mic-stream" --check ;;
+        if ! paired; then
+            app_help
+            command -v notify-send >/dev/null && notify-send -i audio-input-microphone "Phone Mic" \
+                "Install the Phone Mic app on the phone: $APP_URL — or run 'phone-mic app' for a QR code."
+        fi
+        problems ;;
     uninstall)   # undo everything the installation and the scripts ever created or changed
         if [ "${2:-}" = --from-package ]; then cleanup; exit 0; fi      # apt is removing the package: this user's part, config kept
         cleanup
-        rm -rf "$CONF_DIR"                                                       # config, saved phone address, saved previous input
-        echo "Removed: services, launcher, GNOME tile, KDE Connect buttons, $CONF_DIR, virtual mic; adb on the phone back to USB-only."
-        echo "Not touched (not ours): adb's own key in ~/.android, the phone's Developer options, old lines in the system journal."
+        rm -rf "$CONF_DIR"                                                       # config, paired phones, saved previous input
+        echo "Removed: services, launcher, GNOME tile, KDE Connect buttons, $CONF_DIR (paired phones), virtual mic."
+        echo "On the phone: uninstall the Phone Mic app like any other app. Not touched: old lines in the system journal."
         if [ "$PACKAGED" = 1 ]; then
             echo "Now the package itself and its apt source (asks for your password):  sudo apt-get purge phone-mic"
             exec sudo apt-get purge -y phone-mic
         fi
-        rm -f ~/.config/systemd/user/adb-server.service ~/.config/systemd/user/phone-mic.service ~/.config/systemd/user/phone-mic-device.service
+        rm -f ~/.config/systemd/user/phone-mic.service ~/.config/systemd/user/phone-mic-device.service
         systemctl --user daemon-reload
         rm -rf ~/.local/share/gnome-shell/extensions/$UUID
         rm -f ~/.local/share/applications/phone-mic-toggle.desktop
-        rm -f ~/.local/bin/phone-mic-stream ~/.local/bin/phone-mic-gsconnect.js
+        rm -f ~/.local/bin/phone-mic-daemon ~/.local/bin/phone-mic-gsconnect.js
         rm -f ~/.local/bin/phone-mic ;;
     version) echo "phone-mic $VERSION" ;;
-    *) echo "usage: phone-mic on|off|toggle|enable|disable|state|status|log|test|default|doctor|kdeconnect [add|remove]|setup|uninstall|version"; exit 2 ;;
+    *) echo "usage: phone-mic on|off|toggle|enable|disable|state|status|pair|phones|forget <phone>|app|log|test|default|doctor|kdeconnect [add|remove]|setup|uninstall|version"; exit 2 ;;
 esac

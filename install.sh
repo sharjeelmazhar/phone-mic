@@ -6,22 +6,18 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 if [ -x /usr/bin/phone-mic ]; then echo "phone-mic is already installed as a package (/usr/bin/phone-mic); nothing to do. Updates come with apt."; exit 0; fi
 
 # --- requirements -------------------------------------------------------------------------------
-if   command -v apt    >/dev/null; then HINT="sudo apt install adb scrcpy pipewire-bin pulseaudio-utils"
-elif command -v pacman >/dev/null; then HINT="sudo pacman -S android-tools android-udev scrcpy pipewire pipewire-pulse wireplumber libpulse"
-elif command -v dnf    >/dev/null; then HINT="sudo dnf install android-tools pipewire-utils pulseaudio-utils   (scrcpy: see https://github.com/Genymobile/scrcpy/blob/master/doc/linux.md)"
-else HINT="install adb, scrcpy (>= 2.1), pipewire (pw-loopback) and pulseaudio-utils (pactl) with your package manager"; fi
-for c in adb scrcpy pw-loopback pactl; do
+if   command -v apt    >/dev/null; then HINT="sudo apt install pipewire-bin pulseaudio-utils python3"
+elif command -v pacman >/dev/null; then HINT="sudo pacman -S pipewire pipewire-pulse wireplumber libpulse python"
+elif command -v dnf    >/dev/null; then HINT="sudo dnf install pipewire-utils pulseaudio-utils python3"
+else HINT="install pipewire (pw-loopback, pw-cat), pulseaudio-utils (pactl) and python3 with your package manager"; fi
+for c in pw-loopback pw-cat pactl python3; do
     command -v $c >/dev/null || { echo "MISSING: $c  ->  $HINT"; exit 1; }
 done
-ver=$(scrcpy --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
-if [ -n "$ver" ] && [ "$(printf '%s\n2.1\n' "$ver" | sort -V | head -1)" != "2.1" ]; then
-    echo "scrcpy $ver is too old: microphone capture needs scrcpy >= 2.1 (Debian 12 ships 1.25). See https://github.com/Genymobile/scrcpy/blob/master/doc/linux.md"; exit 1
-fi
 command -v systemctl >/dev/null && systemctl --user show-environment >/dev/null 2>&1 || { echo "This setup needs systemd user services (systemctl --user)."; exit 1; }
 pactl info 2>/dev/null | grep -q "PulseAudio (on PipeWire" || echo "Warning: the audio server does not look like PipeWire; the virtual mic needs PipeWire + WirePlumber."
 
 mkdir -p ~/.local/bin ~/.config/systemd/user ~/.local/share/applications ~/.config/phone-mic
-install -m 755 "$HERE/bin/phone-mic" "$HERE/bin/phone-mic-stream" "$HERE/bin/phone-mic-gsconnect.js" ~/.local/bin/
+install -m 755 "$HERE/bin/phone-mic" "$HERE/bin/phone-mic-daemon" "$HERE/bin/phone-mic-gsconnect.js" ~/.local/bin/
 # the files in this folder carry the paths of the .deb (/usr/...): point them at the home folder instead
 for f in "$HERE"/systemd/*.service; do
     sed "s|/usr/lib/phone-mic/|%h/.local/bin/|" "$f" > ~/.config/systemd/user/"$(basename "$f")"

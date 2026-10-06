@@ -1,10 +1,10 @@
 [Unit]
-Description=Phone Mic — stream the Android phone's microphone (scrcpy over adb)
-After=phone-mic-device.service adb-server.service
-Wants=phone-mic-device.service adb-server.service
+Description=Phone Mic — stream the microphone of the Phone Mic app on the phone (Wi-Fi)
+After=phone-mic-device.service network-online.target
+Wants=phone-mic-device.service
 
 [Service]
-ExecStart=/usr/lib/phone-mic/phone-mic-stream
+ExecStart=/usr/lib/phone-mic/phone-mic-daemon
 Restart=always
 RestartSec=3
 

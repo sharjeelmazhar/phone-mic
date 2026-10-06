@@ -1,5 +1,33 @@
 # Setup log
 
+## 2026-10-06 — v2.0.0: the phone app, wireless only, no developer options (Claude Code)
+
+**Problem:** version 1 used adb + scrcpy. After every phone reboot (and in practice after router restarts) the phone had to be
+plugged in by cable once to switch adb-over-Wi-Fi back on, and USB debugging had to stay enabled, which banking apps refuse.
+Wanted: GSConnect-like behaviour, nothing to do after a restart, developer options off.
+
+**Decision:** a small Android app of our own (Kotlin, no libraries, 43 KB) instead of adb. Android only lets an app use the
+microphone while it is in the foreground or runs a microphone foreground service started from the foreground; so the app is a
+foreground service, and after a phone reboot it asks for one tap (notification) instead of starting muted.
+
+**Changes**
+- `android/`: the app. Listens on TCP 47630, announces itself on UDP 47631, pairing with Diffie-Hellman (RFC 3526 group 14)
+  and a 6-digit code approved on the phone, HMAC challenge-response both ways on every connection, audio encrypted with an
+  HMAC-SHA256 keystream, mic recorded only while a paired computer is connected, Wi-Fi lock, a muted-mic detector.
+- `bin/phone-mic-daemon` (Python, stdlib only) replaces `phone-mic-stream`: finds the phone by announcements, its last address,
+  GSConnect's peer and a scan of the local /24 (1.2 s), every 5 s while waiting; plays into `phone_mic_in` with `pw-cat` through
+  a small pipe (bounded delay); keepalive each second, gives up on a silent phone after 4 s. Same safety watchdogs as before.
+- Pairing rules: the first phone pairs without a command; afterwards only within 5 minutes of `phone-mic pair` (also for a phone
+  that lost its pairing: anything on the network could claim its id). A wrong key never removes the real pairing.
+- `adb-server.service` gone (setup/upgrade removes its autostart link); Phone Mic device is now mono; new commands `pair`,
+  `phones`, `forget`, `app`; the tile shows the pairing code; the `.deb` no longer depends on adb/scrcpy; the release workflow
+  checks the APK version and publishes `PhoneMic.apk` next to the apt repository.
+
+**Tests:** `tests/test_daemon.py` (fake phone in the real PipeWire, 40 checks), app unit tests with the same vectors, the app in
+the Android 15 emulator (UI, pairing dialog, service; the emulator's microphone could not be fed audio on this machine), then the
+Redmi Note 11 over the real Wi-Fi: found automatically, paired, real speech arrives without gaps, phone Wi-Fi off/on → back in
+10 s by itself, upgrade 1.0.1 → 2.0.0 via the `.deb`.
+
 ## 2026-10-05 — v1.0.1: works on either Wi-Fi band, Phone Mic stays the default input (Claude Code)
 
 **Problem:** the router (PTCL ZTE F1611A) has the 2.4 GHz network as SSID1 and 5 GHz as SSID5. When the phone

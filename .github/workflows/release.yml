@@ -28,7 +28,15 @@ jobs:
       - run: ./build-deb.sh
       # a second copy under a name that never changes, so the "latest" download link is stable
       - run: cp dist/phone-mic_*_all.deb dist/phone-mic.deb
-      - run: gh release create "$GITHUB_REF_NAME" dist/*.deb --generate-notes
+      # the phone app is built on the developer's machine (signing key not in git) and committed as PhoneMic.apk;
+      # it must carry the same version as the computer side
+      - name: Check PhoneMic.apk against VERSION
+        run: |
+          version=$(sed -n 's/^VERSION=\([0-9][0-9.]*\)$/\1/p' bin/phone-mic)
+          apk=$(unzip -p PhoneMic.apk AndroidManifest.xml | strings -e l | grep -xE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+          echo "app $apk, package $version"
+          [ "$apk" = "$version" ] || { echo "::error::PhoneMic.apk is version '$apk', bin/phone-mic says $version: run android/build.sh and commit"; exit 1; }
+      - run: gh release create "$GITHUB_REF_NAME" dist/*.deb PhoneMic.apk --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
       # the apt repository on GitHub Pages, which installed copies get their updates from
