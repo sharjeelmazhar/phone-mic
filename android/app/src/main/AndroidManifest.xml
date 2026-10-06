@@ -10,19 +10,32 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- lets the app reopen itself invisibly after a reboot or a kill, to get the microphone back (see LaunchActivity) -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:label="Phone Mic"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"
-        android:theme="@android:style/Theme.DeviceDefault.DayNight">
-        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop">
+        android:theme="@style/Theme.PhoneMic">
+        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- the QR code of `phone-mic pair`, also when scanned with the phone's camera app -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="phonemic" android:host="pair" />
+            </intent-filter>
         </activity>
-        <service android:name=".MicService" android:exported="false" android:foregroundServiceType="microphone" />
+        <activity android:name=".LaunchActivity" android:exported="false" android:theme="@style/Theme.PhoneMic.Launch"
+            android:excludeFromRecents="true" android:noHistory="true" android:taskAffinity="" android:launchMode="singleInstance" />
+        <service android:name=".MicService" android:exported="false" android:foregroundServiceType="microphone"
+            android:stopWithTask="false" />
         <receiver android:name=".BootReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

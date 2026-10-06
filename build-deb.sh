@@ -35,8 +35,8 @@ Version: $VERSION
 Section: sound
 Priority: optional
 Architecture: all
-Depends: pipewire-bin, pipewire-pulse, wireplumber, pulseaudio-utils, python3 (>= 3.9), iproute2
-Recommends: libnotify-bin, qrencode
+Depends: pipewire-bin, pipewire-pulse, wireplumber, pulseaudio-utils, python3 (>= 3.9), iproute2, qrencode
+Recommends: libnotify-bin
 Suggests: gnome-shell (>= 45), gnome-shell-extension-gsconnect, gjs
 Installed-Size: $(du -sk --exclude=DEBIAN "$ROOT" | cut -f1)
 Maintainer: Sharjeel M. Rajput <sharjeelmazhar@gmail.com>

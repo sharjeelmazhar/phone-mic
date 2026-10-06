@@ -1,0 +1,8 @@
+<resources>
+    <!-- The window behind Compose (the app draws its own Material 3 theme, wallpaper colours on Android 12+). -->
+    <style name="Theme.PhoneMic" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Invisible activity that only (re)starts the mic service from the foreground, see LaunchActivity. -->
+    <style name="Theme.PhoneMic.Launch" parent="android:Theme.Translucent.NoTitleBar">
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+</resources>

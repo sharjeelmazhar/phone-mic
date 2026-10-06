@@ -1,5 +1,46 @@
 # Setup log
 
+## 2026-10-06 — v2.1.0: always on, QR pairing, new look (Claude Code)
+
+**Asked for:** keep working with the app closed and after reboots, no notification clutter (never on the lock screen),
+Android's own mic indicator instead, a modern Material UI that follows the phone's theme (Samsung too), a clear app icon,
+explain in the app why it does not connect, pairing by scanning a QR code.
+
+**Findings on the Redmi Note 11 (HyperOS 1.0, Android 13)**
+- HyperOS does not deliver BOOT_COMPLETED / MY_PACKAGE_REPLACED to an app without its *Autostart* switch (MIUI app-op 10008);
+  starting activities from the background also needs its op 10021. Both can only be switched on by the person (adb cannot).
+- Android gives the microphone only to a foreground service started while the app is in the foreground, so a restart from the
+  background has to go through an activity: allowed with "Display over other apps".
+- A foreground-service notification is never shown below "low" importance, so the app cannot hide its own icon. On Android 13+
+  an app without the notification permission keeps its service running with no notification at all, and Android's green
+  mic dot appears while it records.
+- Sticky restart right after an app update arrived while the app was already starting the service from the foreground; the
+  first version of the restart logic stopped the service there. Removed: a muted mic is caught by the silence check instead.
+
+**Changes (app)**
+- Jetpack Compose + Material 3 with the wallpaper colours (Android 12+, follows One UI / HyperOS theming), edge-to-edge with
+  correct status-bar icon colours, a status card that says why it is not connected (off, no Wi-Fi, not paired, wrong key,
+  waiting since / last connected), a *Finish setup* card with only the missing items (each opens the right settings page;
+  Xiaomi's two switches are read directly), paired computers with last connection, rename, QR scanner (Google code scanner,
+  no camera permission) and a `phonemic://pair` link so the camera app works too.
+- Restarts itself: invisible LaunchActivity from the boot/update receiver and a 15-minute watchdog alarm; muted-mic detection
+  (not during calls, at most every 10 minutes).
+- Notifications: no permission asked on Android 13+; otherwise minimum importance, secret on the lock screen, one title.
+- BUSY when already streaming to another paired computer (two computers no longer take the mic from each other).
+- Announces itself directly to known computers too (routers that drop broadcasts between Wi-Fi bands).
+- New icon (phone with microphone and sound waves, coral to pink), themed monochrome icon.
+
+**Changes (computer):** `phone-mic pair` shows a QR code (`qrencode` is now a dependency) whose secret authenticates the key
+exchange; while it is shown, phones that did not scan it answer NOQR quietly instead of popping up a code dialog.
+
+- Router finding: on the 2.4 GHz SSID "M" the router (ZTE) drops all traffic between the phone and the wired computer
+  (ping fails both ways, KDE Connect stalls too); on "M 5G" everything works. That is the router's AP/SSID isolation, not
+  something an app can get around. Switching back to "M 5G": streaming again after 7 s by itself. The app now mentions
+  this after a minute of waiting; README troubleshooting too.
+
+**Tests:** daemon tests extended (QR pairing, NOQR before the scan, wrong/old QR secret, BUSY): all pass. On the phone:
+update installs, QR pairing 1.3 s after the scan with no tap, real audio, notification channel and lock-screen state.
+
 ## 2026-10-06 — v2.0.0: the phone app, wireless only, no developer options (Claude Code)
 
 **Problem:** version 1 used adb + scrcpy. After every phone reboot (and in practice after router restarts) the phone had to be

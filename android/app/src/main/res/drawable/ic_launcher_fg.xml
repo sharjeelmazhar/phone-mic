@@ -1,7 +1,13 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp"
-    android:viewportWidth="108" android:viewportHeight="108">
-    <group android:translateX="30" android:translateY="30">
-        <path android:fillColor="#FFFFFFFF"
-            android:pathData="M24,28c3.32,0 6,-2.68 6,-6V10c0,-3.32 -2.68,-6 -6,-6s-6,2.68 -6,6v12c0,3.32 2.68,6 6,6zM34.6,22c0,6 -5.08,10.2 -10.6,10.2S13.4,28 13.4,22H10c0,6.82 5.44,12.46 12,13.44V42h4v-6.56c6.56,-0.96 12,-6.6 12,-13.44h-3.4z" />
-    </group>
+<!-- App icon: a phone with a microphone, sound going out on both sides. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M46,28h16a8,8 0,0 1,8 8v36a8,8 0,0 1,-8 8h-16a8,8 0,0 1,-8 -8v-36a8,8 0,0 1,8 -8z" />
+    <path android:fillColor="#FFFFC2CF" android:pathData="M51,31h6a1,1 0,0 1,0 2h-6a1,1 0,0 1,0 -2z" />
+    <path android:fillColor="#FFFF4060" android:pathData="M54,36a5,5 0,0 1,5 5v9a5,5 0,0 1,-10 0v-9a5,5 0,0 1,5 -5z" />
+    <path android:strokeColor="#FFFF4060" android:strokeWidth="3" android:strokeLineCap="round"
+        android:pathData="M44.5,48.5a9.5,9.5 0,0 0,19 0 M54,58v5 M49.5,65h9" />
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="3.5" android:strokeLineCap="round"
+        android:pathData="M77,47a9,9 0,0 1,0 14 M31,47a9,9 0,0 0,0 14" />
+    <path android:strokeColor="#99FFFFFF" android:strokeWidth="3.5" android:strokeLineCap="round"
+        android:pathData="M83,41.5a16,16 0,0 1,0 25 M25,41.5a16,16 0,0 0,0 25" />
 </vector>

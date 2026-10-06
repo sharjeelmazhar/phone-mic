@@ -194,6 +194,20 @@ def end_to_end():
         phone2.frozen = False; t = time.time()
         check(wait(lambda: e.state()[:1] == ["streaming"], 15), f"streaming again after {time.time() - t:.1f} s")
 
+        print("phone busy with another computer")
+        phone2.vanish(); time.sleep(1)
+        bp = FakePhone(TCP, UDP, name="Redmi Note 11", pid=phone.pid); bp.computers = dict(phone.computers); bp.busy = True
+        bp.start()
+        check(wait(lambda: any(x[0] == "busy" for x in bp.events), 25), "computer asks the busy phone")
+        time.sleep(3)
+        check(e.state()[:1] == ["waiting"], "BUSY: no stream, keeps waiting")
+        bp.busy = False
+        check(wait(lambda: e.state()[:1] == ["streaming"], 15), "streams once the phone is free")
+        bp.vanish(); time.sleep(1)
+        phone2 = FakePhone(TCP, UDP, name="Redmi Note 11", pid=phone.pid); phone2.computers = phone.computers; phone2.start()
+        check(wait(lambda: e.state()[:1] == ["streaming"], 15), "back with the usual phone")
+
+
         print("a second phone is not paired without `phone-mic pair`")
         phone2.vanish(); time.sleep(1)
         other = FakePhone(TCP, UDP, name="Other Phone").start()
@@ -206,6 +220,7 @@ def end_to_end():
         check(sum(1 for x in other.events if x[0] == "pair") == 1, "after Deny it is not asked again and again")
         check(len(e.phones()) == 1, "denied phone not saved")
         other.vanish(); time.sleep(1)
+        os.remove(os.path.join(e.run, "pair"))                  # the 5-minute window of `phone-mic pair` is over
 
         print("security")
         imp = FakePhone(TCP, UDP, name="Redmi Note 11", pid=phone.pid)
@@ -227,6 +242,27 @@ def end_to_end():
         check(not any(x[0] == "pair" for x in imp3.events) and len(e.phones()) == 1,
               "a paired phone's id cannot re-pair without `phone-mic pair`")
         imp3.vanish(); time.sleep(1)
+
+        print("QR pairing")
+        cid = next(iter(phone.computers))
+        secret = os.urandom(16)
+        os.makedirs(e.run, exist_ok=True)
+        open(os.path.join(e.run, "pair-secret"), "w").write(secret.hex()); open(os.path.join(e.run, "pair"), "w").close()
+        qp = FakePhone(TCP, UDP, name="QR Phone", allow=False); qp.start()          # not scanned yet
+        check(wait(lambda: any(x[0] == "noqr" for x in qp.events), 15), "before the scan: asked, quietly refused (no dialog)")
+        check(not any(x[0] == "pair" for x in qp.events) and e.state()[:1] != ["pairing"], "no code shown anywhere")
+        qp.qr = {cid: secret}; t0 = time.time()                                      # now the QR code is scanned
+        check(wait(lambda: len(e.phones()) == 2, 15), f"phone that scanned the QR code is paired without a tap ({time.time() - t0:.1f} s)")
+        check(any(x[0] == "qrpaired" for x in qp.events), "and it was the QR proof that did it")
+        check(not os.path.exists(os.path.join(e.run, "pair-secret")), "QR secret used up")
+        check(wait(lambda: e.state()[:1] == ["streaming"], 15), "streams right after")
+        qp.vanish(); time.sleep(1)
+        open(os.path.join(e.run, "pair-secret"), "w").write(os.urandom(16).hex()); open(os.path.join(e.run, "pair"), "w").close()
+        wrong = FakePhone(TCP, UDP, name="Wrong QR", allow=False); wrong.qr = {cid: secret}; wrong.start()   # old secret
+        time.sleep(8)
+        check(len(e.phones()) == 2 and not any(x[0] == "qrpaired" for x in wrong.events), "an old / wrong QR secret does not pair")
+        wrong.vanish(); time.sleep(1)
+        os.remove(os.path.join(e.run, "pair")); os.remove(os.path.join(e.run, "pair-secret"))
 
         print("stopping")
         t = time.time(); rc = e.stop()

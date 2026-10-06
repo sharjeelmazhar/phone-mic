@@ -20,9 +20,13 @@ import javax.crypto.spec.SecretKeySpec
  *     computer: a "\n" every second (keepalive; no keepalive for 6 s = computer gone)
  *   unknown computer (pairing):
  *     phone:    PAIR <nonceP> <dhPublicP>
- *     computer: PAIRKEY <dhPublicC>
- *     both derive K and a 6-digit code; the person compares the code and allows it on the phone
+ *     computer: PAIRKEY <dhPublicC> <qrTag | ->
+ *     both derive K and a 6-digit code; the person compares the code and allows it on the phone.
+ *     QR pairing: `phone-mic pair` shows phonemic://pair?v=1&c=<computerId>&n=<name>&s=<secret>&h=<ip,ip>; after scanning,
+ *     qrTag = hmac(secret, "Q|nonceP|dhPublicP|dhPublicC") proves it is that computer and the phone allows it without asking;
+ *     a phone that has not scanned that code answers NOQR (no dialog) and the computer asks again a few seconds later
  *     phone:    PAIRED | DENIED     then the connection closes and the computer reconnects with AUTH
+ *   phone already streaming to another computer: BUSY
  * Phone -> LAN broadcast on [UDP_PORT] every few seconds: PHONEMIC 1 <phoneId> <tcpPort> <phoneName>
  *
  * K = HMAC(sha256(DH shared secret), "K|nonceP|nonceC"), Diffie-Hellman over the 2048-bit MODP group of RFC 3526.
@@ -96,6 +100,23 @@ object Proto {
         "%06d".format((ByteBuffer.wrap(hmac(key, "code")).int.toLong() and 0xffffffffL) % 1_000_000)
     fun proof(key: ByteArray, role: String, nonceP: String, nonceC: String) = hex(hmac(key, "$role|$nonceP|$nonceC"))
     fun sessionKey(key: ByteArray, nonceP: String, nonceC: String) = hmac(key, "S|$nonceP|$nonceC")
+
+    fun qrTag(secret: ByteArray, nonceP: String, publicP: String, publicC: String) =
+        hex(hmac(secret, "Q|$nonceP|$publicP|$publicC"))
+
+    /** What the QR code of `phone-mic pair` carries. */
+    data class QrPair(val computerId: String, val name: String, val secret: String, val hosts: List<String>)
+    fun parseQr(text: String?): QrPair? {
+        val t = text?.trim() ?: return null
+        if (!t.startsWith("phonemic://pair?")) return null
+        val q = t.substringAfter('?').split('&').mapNotNull { kv ->
+            kv.split('=', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] }
+        }.toMap()
+        val c = q["c"] ?: return null; val s = q["s"] ?: return null
+        if (q["v"] != "1" || c.length !in 8..64 || s.length != 32 || runCatching { unhex(s) }.isFailure) return null
+        val hosts = q["h"].orEmpty().split(',').filter { Regex("""\d{1,3}(\.\d{1,3}){3}""").matches(it) }.take(8)
+        return QrPair(c, decodeName(q["n"] ?: "-"), s, hosts)
+    }
 
     fun constantTimeEquals(a: String, b: String) = MessageDigest.isEqual(a.toByteArray(), b.toByteArray())
 

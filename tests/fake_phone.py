@@ -26,7 +26,9 @@ class FakePhone:
         self.events = []                    # ("pair", code) / ("stream", cid) / ("keepalive",) / ...
         self.bad_proof = False              # impostor: answers OK with a wrong proof
         self.frozen = False                 # connection stays open but nothing arrives (Wi-Fi switched, no FIN)
-        self.accept_any = False             # impostor: does not check the computer's proof
+        self.accept_any = False
+        self.qr = {}                        # computer id -> secret from a scanned QR code
+        self.busy = False                   # streaming to another computer             # impostor: does not check the computer's proof
         self.server = None
         self.conns = []
         self.running = False
@@ -83,8 +85,14 @@ class FakePhone:
             if key is None:
                 np_ = secrets.token_hex(16); dh = d.Dh()
                 send(f"PAIR {np_} {dh.public}")
-                _, pub = read()
+                t = read()
+                pub = t[1]
                 key = d.pair_key(dh.shared(pub), np_, nc)
+                sec = self.qr.get(cid)
+                if sec and len(t) > 2 and t[2] == d.qr_tag(sec, np_, dh.public, pub):
+                    self.events.append(("qrpaired",)); self.computers[cid] = key; send("PAIRED"); return
+                if len(t) > 2 and t[2] != "-":
+                    self.events.append(("noqr",)); send("NOQR"); return
                 self.events.append(("pair", d.pair_code(key)))
                 time.sleep(1.5)            # the person reading the code
                 if self.allow:
@@ -92,6 +100,8 @@ class FakePhone:
                 else:
                     send("DENIED")
                 return
+            if self.busy:
+                send("BUSY"); self.events.append(("busy",)); return
             np_ = secrets.token_hex(16)
             send(f"AUTH {np_}")
             _, pr = read()

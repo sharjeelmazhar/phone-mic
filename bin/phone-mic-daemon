@@ -46,6 +46,7 @@ RUN_DIR = os.environ.get("PHONE_MIC_RUN_DIR") or os.path.join(os.environ.get("XD
 PHONES = os.path.join(CONF_DIR, "phones.json")      # this computer's id + the paired phones (with their keys)
 STATE = os.path.join(RUN_DIR, "state")               # read by `phone-mic state` / the GNOME tile
 PAIR_REQUEST = os.path.join(RUN_DIR, "pair")         # written by `phone-mic pair`: pairing with a new phone allowed
+PAIR_SECRET = os.path.join(RUN_DIR, "pair-secret")   # ...and the secret in its QR code: a phone that scanned it pairs without asking
 
 CONFIG = {                        # defaults; override in ~/.config/phone-mic/config
     "AUDIO_SOURCE": "mic",        # mic | voice-communication | voice-recognition | unprocessed | camcorder
@@ -191,15 +192,30 @@ class Phones:
         return self.d["phones"]
 
 
+def fresh(path, secs=300):
+    try:
+        return time.time() - os.stat(path).st_mtime < secs
+    except OSError:
+        return False
+
+
+def qr_secret():
+    if not fresh(PAIR_SECRET):
+        return None
+    try:
+        return bytes.fromhex(open(PAIR_SECRET).read().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def qr_tag(secret, np_, pub_p, pub_c):
+    return mac(secret, f"Q|{np_}|{pub_p}|{pub_c}").hex()
+
+
 def pairing_allowed(phones):
     """A phone may be paired when none is paired yet, or for 5 minutes after `phone-mic pair`. Not otherwise, not even
     a phone that was paired before: anything on the network can claim to be that phone."""
-    if not phones.all:
-        return True
-    try:
-        return time.time() - os.stat(PAIR_REQUEST).st_mtime < 300
-    except OSError:
-        return False
+    return not phones.all or fresh(PAIR_REQUEST)
 
 
 # ---- finding the phone ------------------------------------------------------------------------------------------
@@ -413,6 +429,7 @@ class Conn:
 
 stop_now = threading.Event()
 denied_until = {}                  # phone id -> time; after a "Deny" on the phone, do not ask again at once
+busy_logged = {}                   # phone id -> time "busy with another computer" was last logged
 
 
 def try_phone(ip, phones):
@@ -447,8 +464,8 @@ def try_phone(ip, phones):
             c.send("PROOF " + proof(key, "C", np_, nc))
             r = c.line()
             if r[:1] == ["DENIED"]:
-                log(f"{pname} ({ip}) did not accept this computer's key (another phone using its id?); trying again in a minute")
-                denied_until[pid] = time.time() + 60
+                log(f"{pname} ({ip}) did not accept this computer's key (another phone using its id?); trying again in 15 s")
+                denied_until[pid] = time.time() + 15
                 return None
             if len(r) < 4 or r[0] != "OK" or not hmac.compare_digest(r[3], proof(key, "P", np_, nc)):
                 log(f"{ip}: the phone could not prove it is {known['name']}; ignoring it")
@@ -461,26 +478,33 @@ def try_phone(ip, phones):
             if not pairing_allowed(phones):
                 # a paired phone that lost the pairing (app data cleared, reinstalled), or something posing as it
                 log(f"{pname} ({ip}) asks to be paired again; allow it with: phone-mic pair")
-                if known:
+                if known and busy_logged.get("lost-" + pid, 0) < time.time() - 1800:
+                    busy_logged["lost-" + pid] = time.time()
                     notify(f"{pname} lost its pairing with this computer. To pair again run: phone-mic pair")
                 denied_until[pid] = time.time() + 120
                 return None
             np_ = r[1]
             dh = Dh()
-            c.send("PAIRKEY " + dh.public)
+            secret = qr_secret()
+            c.send(f"PAIRKEY {dh.public} {qr_tag(secret, np_, r[2], dh.public) if secret else '-'}")
             key = pair_key(dh.shared(r[2]), np_, nc)
             code = pair_code(key)
-            log(f"pairing with {pname} ({ip}): check that the phone shows code {code} and tap Allow there")
-            write_state("pairing", code, encode_name(pname))
-            notify(f"Pairing with {pname}. On the phone, check the code {code} and tap Allow.", urgent=True)
+            if not secret:
+                log(f"pairing with {pname} ({ip}): open Phone Mic on the phone, check that it shows code {code} and tap Allow")
+                write_state("pairing", code, encode_name(pname))
+                notify(f"Pairing with {pname}. Open Phone Mic on the phone, check the code {code} and tap Allow.", urgent=True)
             r = c.line(130)
+            if r[:1] == ["NOQR"]:                  # has not scanned this computer's QR code (yet)
+                denied_until[pid] = time.time() + 3
+                return None
             if r[:1] == ["PAIRED"]:
                 phones.all[pid] = {"name": pname, "key": key.hex(), "ip": ip, "paired": int(time.time())}
                 phones.save()
-                try:
-                    os.remove(PAIR_REQUEST)
-                except OSError:
-                    pass
+                for f in (PAIR_REQUEST, PAIR_SECRET):
+                    try:
+                        os.remove(f)
+                    except OSError:
+                        pass
                 log(f"paired with {pname}")
                 notify(f"Paired with {pname}.")
                 return "paired"
@@ -490,6 +514,10 @@ def try_phone(ip, phones):
             return None
         if r[:1] == ["DENIED"]:
             denied_until[pid] = time.time() + 600
+        if r[:1] == ["BUSY"]:
+            if busy_logged.get(pid, 0) < time.time() - 600:
+                log(f"{pname} is streaming to another computer; waiting until it is free")
+                busy_logged[pid] = time.time()
         return None
     except (Gone, OSError, ValueError, IndexError) as e:
         log(f"{ip}: {e}")
