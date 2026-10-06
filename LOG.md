@@ -1,5 +1,11 @@
 # Setup log
 
+## 2026-10-06 — v2.1.1: tile after uninstall + reinstall (Claude Code)
+
+`phone-mic uninstall` used `gnome-extensions disable`, which puts the tile on GNOME's disabled-extensions list; a later
+install only added it to enabled-extensions, and the disabled list wins, so the tile never came back. Uninstall now just
+takes it off the enabled list, and setup also takes it off the disabled list.
+
 ## 2026-10-06 — v2.1.0: always on, QR pairing, new look (Claude Code)
 
 **Asked for:** keep working with the app closed and after reboots, no notification clutter (never on the lock screen),
