@@ -1,9 +1,10 @@
-<!-- Themed (monochrome) icon: the same drawing in one colour, the phone as an outline. -->
+<!-- Themed (monochrome) icon: the same microphone and waves as one colour. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="3"
-        android:pathData="M46,29.5h16a6.5,6.5 0,0 1,6.5 6.5v36a6.5,6.5 0,0 1,-6.5 6.5h-16a6.5,6.5 0,0 1,-6.5 -6.5v-36a6.5,6.5 0,0 1,6.5 -6.5z" />
-    <path android:fillColor="#FFFFFFFF" android:pathData="M54,36a5,5 0,0 1,5 5v9a5,5 0,0 1,-10 0v-9a5,5 0,0 1,5 -5z" />
-    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="3" android:strokeLineCap="round"
-        android:pathData="M44.5,48.5a9.5,9.5 0,0 0,19 0 M54,58v5 M49.5,65h9 M77,47a9,9 0,0 1,0 14 M31,47a9,9 0,0 0,0 14 M83,41.5a16,16 0,0 1,0 25 M25,41.5a16,16 0,0 0,0 25" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M54,23a11,11 0,0 1,11 11v17a11,11 0,0 1,-22 0v-17a11,11 0,0 1,11 -11z" />
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="3.4" android:strokeLineCap="round"
+        android:pathData="M40,53a14,14 0,0 0,28 0 M54,67v7 M47,76.5h14 M76,41a14,14 0,0 1,0 18 M32,41a14,14 0,0 0,0 18" />
+    <path android:strokeColor="#80FFFFFF" android:strokeWidth="3.4" android:strokeLineCap="round"
+        android:pathData="M82.5,35a23,23 0,0 1,0 30 M25.5,35a23,23 0,0 0,0 30" />
 </vector>

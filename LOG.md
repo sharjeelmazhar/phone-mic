@@ -1,5 +1,11 @@
 # Setup log
 
+## 2026-10-06 — v2.1.3: new app icon (Claude Code)
+
+A glass microphone (translucent body, bright rim, a sheen across the top and a glowing core) with sound going out on both
+sides, on a blue to violet to pink gradient. Vector only (adaptive icon layers plus a themed one-colour version); the
+source drawing is `docs/icon.svg`.
+
 ## 2026-10-06 — v2.1.2: fixes from the recorded reinstall test (Claude Code)
 
 From the screen recordings of a full uninstall, reboot and reinstall, plus a router reboot and a Wi-Fi switch:
