@@ -1,5 +1,18 @@
 # Setup log
 
+## 2026-10-06 — v2.1.2: fixes from the recorded reinstall test (Claude Code)
+
+From the screen recordings of a full uninstall, reboot and reinstall, plus a router reboot and a Wi-Fi switch:
+- The app screen did not update by itself (permission granted, paired, streaming started or stopped): the cards took a
+  once-a-second tick as an unused parameter, and Compose skips a composable whose parameters are unused. They read it now.
+- "Last connected 3 minutes ago" seconds after the stream dropped: the time was only stored when the stream started.
+- QR pairing and first pairing did nothing for minutes before a reboot, with nothing in the computer's log: the computer
+  never reached the phone (KDE Connect lost it too). The app now pings the computer and says at once when it gets no
+  answer (router keeping that Wi-Fi apart), shows "Pairing with …" after a scan, and says when the computer answers but its
+  Phone Mic is off.
+- The tile kept saying "Streaming" up to ~20 s after the stream dropped: the daemon writes "waiting" as soon as it ends.
+- Scanning the app-download QR code in the app now says that it is the download link.
+
 ## 2026-10-06 — v2.1.1: tile after uninstall + reinstall (Claude Code)
 
 `phone-mic uninstall` used `gnome-extensions disable`, which puts the tile on GNOME's disabled-extensions list; a later

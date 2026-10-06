@@ -59,6 +59,10 @@ class MicService : Service() {
         /** Last thing a computer did, for the app's "why is it not connecting" line. */
         @Volatile var lastEvent: String? = null; private set
         @Volatile var waitingSince = 0L; private set
+        /** The computers' addresses that did not answer a ping from this phone (router keeps the networks apart, or off). */
+        @Volatile var unreachable: List<String> = emptyList(); private set
+        /** Some known address answered a ping: the computer is there, so its Phone Mic is off if nothing connects. */
+        @Volatile var reachable: List<String> = emptyList(); private set
         @Volatile private var lastMuteRestart = 0L
 
         fun start(ctx: Context) {
@@ -218,6 +222,8 @@ class MicService : Service() {
 
     /** Tell the computer where we are: broadcast on every network, and directly to the computers we know (routers
      *  often drop broadcasts between their 2.4 GHz / 5 GHz Wi-Fi and the cable). The computer also scans for us. */
+    private var lastProbe = 0L
+
     private fun announce() {
         val sock = DatagramSocket().apply { broadcast = true }
         while (!stopping) {
@@ -232,6 +238,13 @@ class MicService : Service() {
                 }
                 val direct = (store.computers().flatMap { it.hosts } + store.qrHosts()).distinct()
                 for (h in direct) runCatching { send(InetAddress.getByName(h)) }
+                // can this phone reach the computer at all? lets the app say why nothing connects
+                if (SystemClock.elapsedRealtime() - lastProbe > 9000 && direct.isNotEmpty()) {
+                    lastProbe = SystemClock.elapsedRealtime()
+                    val ok = direct.filter { h -> runCatching { InetAddress.getByName(h).isReachable(1500) }.getOrDefault(false) }
+                    reachable = ok; unreachable = direct - ok.toSet()
+                }
+            } else { unreachable = emptyList(); reachable = emptyList()
             }
             synchronized(announceWake) { announceWake.wait(3000) }
         }
@@ -374,6 +387,7 @@ class MicService : Service() {
             } finally {
                 runCatching { rec.stop() }; rec.release()
                 synchronized(this) { if (current === s) { current = null; currentId = null; streamingTo = null; waitingSince = System.currentTimeMillis() } }
+                store.touch(cid)
                 if (streamingTo == null) wakeLock?.release()
                 updateStatus()
                 synchronized(announceWake) { announceWake.notifyAll() }

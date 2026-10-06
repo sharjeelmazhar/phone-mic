@@ -10,3 +10,4 @@ android/build/
 android/local.properties
 android/*.jks
 __pycache__/
+Test Recordings/

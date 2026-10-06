@@ -75,6 +75,10 @@ class Store(context: Context) {
         save(o)
     }
 
+    /** The stream just ended: "last connected" counts from now, not from when it started. */
+    @Synchronized
+    fun touch(id: String) { val o = all(); o.optJSONObject(id)?.put("lastSeen", System.currentTimeMillis()) ?: return; save(o) }
+
     @Synchronized
     fun forget(id: String) { val o = all(); o.remove(id); save(o) }
 
@@ -102,6 +106,14 @@ class Store(context: Context) {
         val now = System.currentTimeMillis()
         return o.keys().asSequence().map { o.getJSONObject(it) }.filter { it.getLong("until") > now }
             .flatMap { c -> c.getJSONArray("hosts").let { a -> List(a.length()) { a.getString(it) } } }.toList()
+    }
+
+    /** Names of the computers whose QR code was scanned and that have not paired yet. */
+    @Synchronized
+    fun qrNames(): List<String> {
+        val o = JSONObject(prefs.getString("qr", "{}")!!)
+        val now = System.currentTimeMillis()
+        return o.keys().asSequence().map { o.getJSONObject(it) }.filter { it.getLong("until") > now }.map { it.getString("name") }.toList()
     }
 
     @Synchronized

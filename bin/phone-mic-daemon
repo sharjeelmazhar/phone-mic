@@ -608,6 +608,7 @@ def stream(c, pname, cipher, app_version):
         except subprocess.TimeoutExpired:
             player.kill()
         restore_default()
+        write_state("waiting")             # the tile shows it right away, not after the next connection attempt
 
 
 # ---- main -------------------------------------------------------------------------------------------------------

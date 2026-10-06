@@ -84,7 +84,11 @@ class MainActivity : ComponentActivity() {
 
     private fun onQr(text: String?) {
         val q = Proto.parseQr(text)
-        if (q == null) { message.value = "That is not a Phone Mic pairing code. On the computer run: phone-mic pair"; return }
+        if (q == null) {
+            message.value = if (text?.contains("PhoneMic.apk") == true) "That code is the app download link. Scan the code that  phone-mic pair  shows."
+                else "That is not a Phone Mic pairing code. On the computer run: phone-mic pair"
+            return
+        }
         store.addQr(q)
         if (hasMic() && !MicService.running) MicService.start(this)
         MicService.announceNow(this)
@@ -196,8 +200,22 @@ class MainActivity : ComponentActivity() {
                 MicService.lastError ?: "Turn it on and your computer finds this phone by itself.", 0)
             to != null -> Status(Icons.Outlined.GraphicEq, "Streaming to $to", "Your computer is using this phone's microphone.", 1)
             !onWifi() -> Status(Icons.Outlined.WifiOff, "Not on Wi-Fi", "Phone Mic connects over your home network. Join the same network as the computer.", 2)
+            store.qrNames().isNotEmpty() && MicService.unreachable.isNotEmpty() && MicService.reachable.isEmpty() ->
+                Status(Icons.Outlined.WifiOff, "Can't reach ${store.qrNames().first()}",
+                    "This phone gets no answer from the computer (${MicService.unreachable.joinToString()}). Your router keeps this " +
+                        "Wi-Fi apart from it: switch the phone to your other Wi-Fi network (or turn off “AP isolation” in the router).", 2)
+            store.qrNames().isNotEmpty() -> Status(Icons.Outlined.Sync, "Pairing with ${store.qrNames().first()}…",
+                "Keep  phone-mic pair  running on the computer. Takes a few seconds.", 0)
             computers.isEmpty() -> Status(Icons.Outlined.QrCode2, "Not paired yet",
                 "On the computer run  phone-mic pair  and scan the QR code. The first computer can also pair by itself: just wait a moment.", 0)
+            MicService.unreachable.isNotEmpty() && MicService.reachable.isEmpty() -> Status(Icons.Outlined.WifiOff,
+                "Can't reach ${computers.first().name}",
+                "This phone gets no answer from ${MicService.unreachable.joinToString()}. Either the computer is off, or your router " +
+                    "keeps this Wi-Fi apart from it: switch the phone to your other Wi-Fi network (or turn off “AP isolation” in the router).", 2)
+            MicService.reachable.isNotEmpty() && System.currentTimeMillis() - MicService.waitingSince > 20_000 -> Status(
+                Icons.Outlined.ErrorOutline, "${computers.first().name} is on, but not connecting",
+                "The computer answers, but its Phone Mic does not connect. Switch on the Phone Mic tile in its Quick Settings " +
+                    "(or run  phone-mic on).", 2)
             MicService.lastEvent != null -> Status(Icons.Outlined.ErrorOutline, "Waiting for your computer", MicService.lastEvent!!, 2)
             else -> Status(Icons.Outlined.Sync, "Waiting for your computer",
                 "Connects by itself when ${computers.joinToString(" or ") { it.name }} is on and on the same network. " +
@@ -211,8 +229,9 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun StatusCard(@Suppress("UNUSED_PARAMETER") tick: Int) {
-        val s = status()
+    private fun StatusCard(tick: Int) {
+        // tick must be read: Compose skips a composable whose parameters are unused, and the card would never refresh
+        val s = remember(tick) { status() }
         val cs = MaterialTheme.colorScheme
         val (bg, fg) = when (s.tone) {
             1 -> cs.primaryContainer to cs.onPrimaryContainer
@@ -247,10 +266,10 @@ class MainActivity : ComponentActivity() {
                        val done: (() -> Unit)? = null, val button: String = "Allow", val doneText: String = "Done")
 
     @Composable
-    private fun SetupCard(@Suppress("UNUSED_PARAMETER") tick: Int) {
+    private fun SetupCard(tick: Int) {
         val pkg = Uri.parse("package:$packageName")
         val xiaomi = Build.MANUFACTURER.lowercase() in setOf("xiaomi", "redmi", "poco")
-        val steps = buildList {
+        val steps = remember(tick) { buildList {
             if (!getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName))
                 add(Step(Icons.Outlined.BatteryChargingFull, "Run in the background", "So Android does not stop Phone Mic to save battery.",
                     { open(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, pkg)) }))
@@ -278,7 +297,7 @@ class MainActivity : ComponentActivity() {
                         "Phone Mic and it stays out of your notification shade and lock screen; it keeps working the same.",
                     { open(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)) },
                     { store.notesKept = true }, "Open", "Keep it"))
-        }
+        } }
         if (steps.isEmpty()) return
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer,
             contentColor = MaterialTheme.colorScheme.onTertiaryContainer)) {
@@ -317,8 +336,8 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun ComputersCard(@Suppress("UNUSED_PARAMETER") tick: Int) {
-        val list = store.computers()
+    private fun ComputersCard(tick: Int) {
+        val list = remember(tick) { store.computers() }
         if (list.isEmpty()) return
         var forget by remember { mutableStateOf<Store.Computer?>(null) }
         ElevatedCard {
